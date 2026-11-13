@@ -149,6 +149,8 @@ export default function JoinPage() {
 
     const onVisible = () => {
       if (document.visibilityState === "visible" && !socket.connected) {
+        socket.io.engine?.close();
+        socket.disconnect();
         socket.connect();
       }
     };

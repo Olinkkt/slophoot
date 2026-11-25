@@ -43,11 +43,35 @@ function errorsForMessage(message: string): FieldErrors {
   return { form: message };
 }
 
+const CONNECTING_NOTICE_DELAY_MS = 1500;
+
+/** True only after `active` has stayed true for `delayMs`, so quick connects never flash a notice. */
+function useAfterDelay(active: boolean, delayMs: number): boolean {
+  const [elapsed, setElapsed] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setElapsed(true);
+    }, delayMs);
+    return () => {
+      clearTimeout(timer);
+      setElapsed(false);
+    };
+  }, [active, delayMs]);
+
+  return active && elapsed;
+}
+
 export default function JoinPage() {
   const connection = useSocket();
   const socket = connection?.socket ?? null;
   const connected = connection?.connected ?? false;
   const [phase, setPhase] = useState<Phase>("form");
+  const showConnecting = useAfterDelay(!connected && phase === "form", CONNECTING_NOTICE_DELAY_MS);
   const [formStep, setFormStep] = useState<FormStep>("pin");
   const [pin, setPin] = useState("");
   const [nickname, setNickname] = useState("");
@@ -420,7 +444,7 @@ export default function JoinPage() {
           </form>
         ) : null}
 
-        {!connected && phase === "form" ? (
+        {showConnecting ? (
           <p role="status" className="sh-status">
             Connecting…
           </p>

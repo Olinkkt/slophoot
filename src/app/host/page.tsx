@@ -583,9 +583,6 @@ export default function HostPage() {
                 </option>
               ))}
             </select>
-            <Link href="/editor" className="sh-card-quiz-link">
-              Create a quiz
-            </Link>
           </div>
           <GoldButton
             type="button"

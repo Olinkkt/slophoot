@@ -681,7 +681,7 @@ body {
 .sh-wait-pill {
   position: absolute;
   left: 50%;
-  top: 607px;
+  top: 50%;
   z-index: 1;
   width: 576px;
   max-width: calc(100vw - 2rem);
@@ -698,7 +698,7 @@ body {
 .sh-player-list {
   position: absolute;
   left: 50%;
-  top: 607px;
+  top: 50%;
   z-index: 1;
   display: flex;
   width: min(1100px, calc(100vw - 3rem));

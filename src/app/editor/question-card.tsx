@@ -7,6 +7,7 @@ import {
   IMAGE_URL_MAX,
   ITEMS_MAX,
   ITEMS_MIN,
+  OPTIONS_MAX,
   OPTIONS_MIN,
   OPTION_TEXT_MAX,
   QUESTION_TEXT_MAX,
@@ -56,6 +57,10 @@ export function QuestionCard({ draft, index, canRemove, onChange, onRemove }: Pr
       ...current,
       options: current.options.map((option, i) => (i === at ? value : option)),
     }));
+  };
+
+  const addOption = () => {
+    onChange((current) => ({ ...current, options: [...current.options, ""] }));
   };
 
   const removeOption = (at: number) => {
@@ -123,6 +128,9 @@ export function QuestionCard({ draft, index, canRemove, onChange, onRemove }: Pr
           </button>
         </div>
       ))}
+      <button type="button" className={ADD_BUTTON} disabled={draft.options.length >= OPTIONS_MAX} onClick={addOption}>
+        <Plus aria-hidden="true" size={16} /> Add answer
+      </button>
     </>
   );
 

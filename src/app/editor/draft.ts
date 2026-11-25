@@ -30,9 +30,9 @@ export type Draft = {
 };
 
 export const TYPE_LABELS: Record<DraftType, string> = {
-  choice: "Multiple choice",
+  choice: "Pick one",
   truefalse: "True / False",
-  multi: "Multiple answers",
+  multi: "Pick all that apply",
   text: "Type the answer",
   slider: "Number slider",
   order: "Put in order",

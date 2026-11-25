@@ -1,0 +1,8 @@
+@tailwind base;@tailwind components;@tailwind utilities;
+body{background:radial-gradient(1200px 600px at 50% -10%,#5b34b5 0%,#2a1566 45%,#150a38 100%) fixed;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
+@layer components{
+  .card{@apply rounded-2xl bg-white/10 p-5 ring-1 ring-white/15 backdrop-blur}
+  .btn{@apply rounded-xl bg-yellow-400 px-6 py-3 text-lg font-extrabold text-slate-900 shadow-[0_4px_0_#b88a00] transition active:translate-y-1 active:shadow-none disabled:cursor-not-allowed disabled:opacity-40}
+  .btn-ghost{@apply rounded-xl bg-white/10 px-4 py-2 font-semibold ring-1 ring-white/20 hover:bg-white/20}
+  .input{@apply w-full rounded-xl bg-white px-4 py-3 text-lg text-slate-900 outline-none placeholder:text-slate-400 focus:ring-4 focus:ring-yellow-400/60}
+}

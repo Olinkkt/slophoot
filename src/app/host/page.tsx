@@ -559,9 +559,11 @@ export default function HostPage() {
         <div className="sh-join-row">
           <div className="sh-join-banner">
             <p className="sh-join-text">
-              Join at <b>{joinLink.host || "this site"}</b>
-              <br />
-              and enter the PIN
+              <span>
+                Join at <b>{joinLink.host || "this site"}</b>
+                <br />
+                and enter the PIN
+              </span>
             </p>
             <button
               type="button"

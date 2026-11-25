@@ -248,15 +248,6 @@ body {
   margin-bottom: 48px;
 }
 
-.sh-logo-host {
-  position: absolute;
-  left: 50%;
-  top: 250px;
-  z-index: 1;
-  width: 300px;
-  transform: translateX(-50%);
-}
-
 .sh-logo-player {
   position: absolute;
   left: 50%;
@@ -603,13 +594,6 @@ body {
   color: var(--sh-ink);
   text-align: left;
   white-space: nowrap;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.sh-pin-plate:focus-visible {
-  outline: 3px solid var(--sh-gold);
-  outline-offset: -6px;
 }
 
 .sh-pin-tag {
@@ -628,13 +612,70 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.sh-qr-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  cursor: zoom-in;
+}
+
+.sh-qr-button:focus-visible {
+  outline: 3px solid var(--sh-gold);
+  outline-offset: 3px;
+}
+
+.sh-qr-dialog {
+  max-width: calc(100vw - 2rem);
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--sh-white);
+  margin: auto;
+}
+
+.sh-qr-dialog::backdrop {
+  background: rgb(0 0 0 / 0.65);
+}
+
+.sh-qr-modal {
+  position: relative;
+  padding: 28px;
+}
+
+.sh-qr-large {
+  display: block;
+  width: min(560px, 80vw, 70vh);
+  height: auto;
+}
+
+.sh-qr-close {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sh-ink);
+  cursor: pointer;
+}
+
+.sh-qr-close:hover,
+.sh-qr-close:focus-visible {
+  background: rgb(0 0 0 / 0.1);
+}
+
 .sh-qr {
   width: 142px;
   height: 142px;
   border-radius: 4px;
   background: var(--sh-white);
   box-shadow: 0 3px 0 rgb(0 0 0 / 0.35);
-  image-rendering: pixelated;
 }
 
 .sh-wait-pill {
@@ -775,16 +816,7 @@ body {
     margin-bottom: 28px;
   }
 
-  .sh-logo-host {
-    position: relative;
-    left: auto;
-    top: auto;
-    width: min(220px, 58vw);
-    margin: 24px auto 0;
-    transform: none;
-  }
-
-  .sh-quiz-pick {
+    .sh-quiz-pick {
     position: relative;
     left: auto;
     top: auto;

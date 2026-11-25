@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize, Users } from "lucide-react";
+import { Maximize, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
@@ -85,6 +85,48 @@ function clearHostSession(): void {
   }
 }
 
+/** The join QR code, large, over the page. Esc, the X, or a click outside closes it. */
+function QrDialog({ src, pin, onClose }: { src: string; pin: string; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) {
+      dialog.showModal();
+    }
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="sh-qr-dialog"
+      aria-label={`QR code to join game ${pin}`}
+      onClose={onClose}
+      onClick={(event) => {
+        // The dialog has no padding, so a click on the dialog itself is a click on the backdrop.
+        if (event.target === event.currentTarget) {
+          dialogRef.current?.close();
+        }
+      }}
+    >
+      <div className="sh-qr-modal">
+        <button
+          type="button"
+          className="sh-qr-close"
+          aria-label="Close"
+          onClick={() => {
+            dialogRef.current?.close();
+          }}
+        >
+          <X aria-hidden="true" size={24} />
+        </button>
+        {/* eslint-disable-next-line @next/next/no-img-element -- A data URL needs no image optimization. */}
+        <img src={src} alt={`QR code to join game ${pin}`} className="sh-qr-large" />
+      </div>
+    </dialog>
+  );
+}
+
 /** Where players join, and a QR code that opens the join page with the PIN filled in. */
 function useJoinLink(pin: string | null): { host: string; qr: string | null } {
   const [qr, setQr] = useState<string | null>(null);
@@ -96,7 +138,7 @@ function useJoinLink(pin: string | null): { host: string; qr: string | null } {
 
     let current = true;
     const url = `${window.location.origin}/?pin=${pin}`;
-    QRCode.toDataURL(url, { margin: 1, width: 280, errorCorrectionLevel: "M" }).then(
+    QRCode.toDataURL(url, { margin: 1, width: 640, errorCorrectionLevel: "M" }).then(
       (dataUrl) => {
         if (current) {
           setQr(dataUrl);
@@ -127,12 +169,12 @@ export default function HostPage() {
   const [replaced, setReplaced] = useState(false);
   const [lobby, setLobby] = useState<LobbyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pinCopied, setPinCopied] = useState(false);
   const [game, setGame] = useState<ClientGame | null>(null);
   const [quizzes, setQuizzes] = useState<QuizSummary[] | null>(null);
   const [quizError, setQuizError] = useState(false);
   const [pickedQuizId, setPickedQuizId] = useState("");
   const [openingEditor, setOpeningEditor] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const joinLink = useJoinLink(lobby?.pin ?? null);
   const lobbyRef = useRef<LobbyState | null>(null);
   const hostingRef = useRef(false);
@@ -141,7 +183,6 @@ export default function HostPage() {
   const resumeAttemptRef = useRef<string | null>(null);
   const resumeTriesRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     lobbyRef.current = lobby;
@@ -434,36 +475,6 @@ export default function HostPage() {
     }
   }, [socket]);
 
-  const copyPin = useCallback(() => {
-    if (!lobby || !navigator.clipboard?.writeText) {
-      return;
-    }
-
-    void navigator.clipboard.writeText(lobby.pin).then(
-      () => {
-        setPinCopied(true);
-        if (copyTimerRef.current !== null) {
-          clearTimeout(copyTimerRef.current);
-        }
-        copyTimerRef.current = setTimeout(() => {
-          copyTimerRef.current = null;
-          setPinCopied(false);
-        }, 2000);
-      },
-      () => {
-        setPinCopied(false);
-      },
-    );
-  }, [lobby]);
-
-  useEffect(() => {
-    return () => {
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-    };
-  }, []);
-
   const startGame = useCallback(() => {
     const quizId = pickedQuizId || quizzes?.[0]?.id;
     if (!socket || !socket.connected || !lobby || !quizId) {
@@ -565,25 +576,34 @@ export default function HostPage() {
                 and enter the PIN
               </span>
             </p>
-            <button
-              type="button"
-              onClick={copyPin}
-              className="sh-pin-plate"
-              aria-label={`Game PIN ${lobby.pin}. Click to copy.`}
-            >
+            <p className="sh-pin-plate">
               <span className="sh-pin-tag">Game PIN:</span>
               <span className="sh-pin-value">{lobby.pin}</span>
-            </button>
+            </p>
           </div>
           {joinLink.qr ? (
-            // eslint-disable-next-line @next/next/no-img-element -- A data URL needs no image optimization.
-            <img src={joinLink.qr} alt={`QR code to join game ${lobby.pin}`} className="sh-qr" />
+            <button
+              type="button"
+              className="sh-qr-button"
+              aria-label="Show the QR code larger"
+              onClick={() => {
+                setQrOpen(true);
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- A data URL needs no image optimization. */}
+              <img src={joinLink.qr} alt={`QR code to join game ${lobby.pin}`} className="sh-qr" />
+            </button>
           ) : null}
         </div>
-        <span role="status" className="sr-only">
-          {pinCopied ? "Copied" : ""}
-        </span>
-        <Logo className="sh-logo-host" />
+        {qrOpen && joinLink.qr ? (
+          <QrDialog
+            src={joinLink.qr}
+            pin={lobby.pin}
+            onClose={() => {
+              setQrOpen(false);
+            }}
+          />
+        ) : null}
         {notice ? (
           <p role="alert" className="sh-quiz-note sh-quiz-note-lobby">
             {notice}

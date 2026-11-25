@@ -287,6 +287,10 @@ body {
   color: var(--sh-blue);
 }
 
+.sh-card-label-tight {
+  margin-bottom: 4px;
+}
+
 .sh-field {
   display: block;
   width: 100%;

@@ -559,7 +559,7 @@ export default function HostPage() {
         <Logo className="sh-logo-join" priority />
         <h1 className="sr-only">Host a game</h1>
         <div className="sh-card">
-          <p className="sh-card-label">Host a game</p>
+          <p className="sh-card-label sh-card-label-tight">Host a game</p>
           <p className="mb-1 text-center text-base font-bold text-sh-navy">
             Create a room, then share the PIN.
           </p>

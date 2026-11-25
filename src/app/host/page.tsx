@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HostGame, type ClientGame } from "@/components/game";
 import { GoldButton, Logo, Stage } from "@/components/stage";
@@ -26,6 +27,7 @@ type HostSession = {
   token: string;
 };
 
+const NEW_QUIZ_VALUE = "__new__";
 const HOST_SESSION_KEY = "slophoot-host";
 const RESUME_RETRY_LIMIT = 3;
 const RESUME_RETRY_STEP_MS = 300;
@@ -82,6 +84,7 @@ function clearHostSession(): void {
 }
 
 export default function HostPage() {
+  const router = useRouter();
   const connection = useSocket();
   const socket = connection?.socket ?? null;
   const connected = connection?.connected ?? false;
@@ -571,8 +574,12 @@ export default function HostPage() {
               id="quiz"
               className="sh-quiz-select"
               value={pickedQuizId || quizzes?.[0]?.id || ""}
-              disabled={!quizzes || quizzes.length === 0}
+              disabled={!quizzes}
               onChange={(event) => {
+                if (event.target.value === NEW_QUIZ_VALUE) {
+                  router.push("/editor");
+                  return;
+                }
                 setPickedQuizId(event.target.value);
               }}
             >
@@ -582,6 +589,7 @@ export default function HostPage() {
                   {quiz.title} ({quiz.questionCount})
                 </option>
               ))}
+              <option value={NEW_QUIZ_VALUE}>+ New quiz…</option>
             </select>
           </div>
           <GoldButton

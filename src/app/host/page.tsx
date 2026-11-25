@@ -98,6 +98,7 @@ export default function HostPage() {
   const [quizzes, setQuizzes] = useState<QuizSummary[] | null>(null);
   const [quizError, setQuizError] = useState(false);
   const [pickedQuizId, setPickedQuizId] = useState("");
+  const [openingEditor, setOpeningEditor] = useState(false);
   const lobbyRef = useRef<LobbyState | null>(null);
   const hostingRef = useRef(false);
   const reclaimingRef = useRef(false);
@@ -573,10 +574,11 @@ export default function HostPage() {
             <select
               id="quiz"
               className="sh-quiz-select"
-              value={pickedQuizId || quizzes?.[0]?.id || ""}
-              disabled={!quizzes}
+              value={openingEditor ? NEW_QUIZ_VALUE : pickedQuizId || quizzes?.[0]?.id || ""}
+              disabled={!quizzes || openingEditor}
               onChange={(event) => {
                 if (event.target.value === NEW_QUIZ_VALUE) {
+                  setOpeningEditor(true);
                   router.push("/editor");
                   return;
                 }

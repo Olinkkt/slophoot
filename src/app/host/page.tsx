@@ -112,12 +112,7 @@ export default function HostPage() {
     replacedRef.current = replaced;
   }, [replaced]);
 
-  const inLobby = lobby !== null;
   useEffect(() => {
-    if (!inLobby) {
-      return;
-    }
-
     const controller = new AbortController();
     fetch("/api/quizzes", { signal: controller.signal })
       .then((response) => {
@@ -139,7 +134,7 @@ export default function HostPage() {
     return () => {
       controller.abort();
     };
-  }, [inLobby]);
+  }, []);
 
   useEffect(() => {
     if (!lobby || replaced) {
@@ -514,35 +509,11 @@ export default function HostPage() {
           </span>
         </header>
         <Logo className="sh-logo-host" priority />
-        <div className="sh-quiz-pick">
-          <label htmlFor="quiz" className="sh-quiz-label">
-            Quiz
-          </label>
-          <select
-            id="quiz"
-            className="sh-quiz-select"
-            value={quizId}
-            disabled={!quizzes || quizzes.length === 0}
-            onChange={(event) => {
-              setPickedQuizId(event.target.value);
-            }}
-          >
-            {quizzes === null ? <option value="">{quizError ? "Couldn’t load quizzes" : "Loading…"}</option> : null}
-            {quizzes?.map((quiz) => (
-              <option key={quiz.id} value={quiz.id}>
-                {quiz.title} ({quiz.questionCount})
-              </option>
-            ))}
-          </select>
-          <Link href="/editor" className="sh-quiz-link">
-            Create a quiz
-          </Link>
-          {notice ? (
-            <p role="alert" className="sh-quiz-note">
-              {notice}
-            </p>
-          ) : null}
-        </div>
+        {notice ? (
+          <p role="alert" className="sh-quiz-note sh-quiz-note-lobby">
+            {notice}
+          </p>
+        ) : null}
         <GoldButton
           type="button"
           className="sh-gold-start"
@@ -592,6 +563,30 @@ export default function HostPage() {
           <p className="mb-1 text-center text-base font-bold text-sh-navy">
             Create a room, then share the PIN.
           </p>
+          <div className="sh-card-quiz">
+            <label htmlFor="quiz" className="sh-card-quiz-label">
+              Quiz
+            </label>
+            <select
+              id="quiz"
+              className="sh-quiz-select"
+              value={pickedQuizId || quizzes?.[0]?.id || ""}
+              disabled={!quizzes || quizzes.length === 0}
+              onChange={(event) => {
+                setPickedQuizId(event.target.value);
+              }}
+            >
+              {quizzes === null ? <option value="">{quizError ? "Couldn’t load quizzes" : "Loading…"}</option> : null}
+              {quizzes?.map((quiz) => (
+                <option key={quiz.id} value={quiz.id}>
+                  {quiz.title} ({quiz.questionCount})
+                </option>
+              ))}
+            </select>
+            <Link href="/editor" className="sh-card-quiz-link">
+              Create a quiz
+            </Link>
+          </div>
           <GoldButton
             type="button"
             className="sh-gold-join"

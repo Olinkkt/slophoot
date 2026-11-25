@@ -421,6 +421,35 @@ body {
   text-underline-offset: 3px;
 }
 
+.sh-card-quiz {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  text-align: left;
+}
+
+.sh-card-quiz-label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--sh-navy);
+}
+
+.sh-card-quiz-link {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sh-blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sh-quiz-note-lobby {
+  position: relative;
+  z-index: 1;
+  margin: 12px auto 0;
+}
+
 .sh-quiz-note {
   padding: 8px 12px;
   background: var(--sh-white);

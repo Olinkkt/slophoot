@@ -24,6 +24,47 @@ type LobbyState = {
   players: LobbyPlayer[];
 };
 
+const CHIP_STAGGER_MS = 40;
+const CHIP_STAGGER_MAX = 10;
+
+/**
+ * Joined players. Chips that arrive in the same update (a reload with a full lobby,
+ * or two students at once) enter 40ms apart; a single join enters right away.
+ */
+function PlayerChips({ players }: { players: LobbyPlayer[] }) {
+  const [seen, setSeen] = useState<LobbyPlayer[]>([]);
+  const [delays, setDelays] = useState<Map<string, number>>(new Map());
+
+  if (seen !== players) {
+    const known = new Set(seen.map((player) => player.nickname));
+    const next = new Map<string, number>();
+    for (const player of players) {
+      if (!known.has(player.nickname)) {
+        next.set(player.nickname, Math.min(next.size, CHIP_STAGGER_MAX) * CHIP_STAGGER_MS);
+      }
+    }
+    setSeen(players);
+    setDelays(next);
+  }
+
+  return (
+    <ul aria-live="polite" aria-label="Players" className="sh-player-list">
+      {players.map((player) => {
+        const delay = delays.get(player.nickname) ?? 0;
+        return (
+          <li
+            key={player.nickname}
+            className="sh-player-chip"
+            style={delay > 0 ? { transitionDelay: `${delay}ms` } : undefined}
+          >
+            {player.nickname}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 type HostSession = {
   pin: string;
   token: string;
@@ -622,13 +663,7 @@ export default function HostPage() {
             {reclaiming ? "Reconnecting…" : "Waiting for players…"}
           </p>
         ) : (
-          <ul aria-live="polite" aria-label="Players" className="sh-player-list">
-            {lobby.players.map((player) => (
-              <li key={player.nickname} className="sh-player-chip">
-                {player.nickname}
-              </li>
-            ))}
-          </ul>
+          <PlayerChips players={lobby.players} />
         )}
       </Stage>
     );

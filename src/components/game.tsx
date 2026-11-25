@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { TEXT_INPUT_MAX } from "@/shared/quiz";
 import type { AnswerValue, GameQuestion, GameState } from "@/shared/events";
 import { GoldButton, Logo } from "@/components/stage";
@@ -55,7 +55,10 @@ function Countdown({ game }: { game: ClientGame }) {
         {Math.ceil(remaining / 1000)}
       </span>
       <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/25" aria-hidden="true">
-        <div className="h-full rounded-full bg-white" style={{ width: `${percent}%` }} />
+        <div
+          className="sh-timer h-full w-full rounded-full bg-white"
+          style={{ clipPath: `inset(0 ${100 - percent}% 0 0 round 999px)` }}
+        />
       </div>
     </div>
   );
@@ -142,13 +145,27 @@ function Explanation({ question }: { question: GameQuestion }) {
   ) : null;
 }
 
-function Leaderboard({ board, limit }: { board: ClientGame["board"]; limit: number }) {
+/** Podium order: everyone below 3rd first, then 3rd, 2nd, 1st, 60ms apart. */
+function riseDelay(index: number): number {
+  return index >= 3 ? 0 : (3 - index) * 60;
+}
+
+function Leaderboard({
+  board,
+  limit,
+  celebrate = false,
+}: {
+  board: ClientGame["board"];
+  limit: number;
+  celebrate?: boolean;
+}) {
   return (
     <ol aria-label="Leaderboard" className="flex flex-col gap-2">
       {board.slice(0, limit).map((entry, index) => (
         <li
           key={`${entry.nickname}-${index}`}
-          className="flex items-center justify-between gap-4 rounded-md bg-white px-4 py-2 text-lg text-sh-navy shadow-[0_3px_0_rgb(0_0_0/0.35)]"
+          style={celebrate ? { animationDelay: `${riseDelay(index)}ms` } : undefined}
+          className={`flex items-center justify-between gap-4 rounded-md bg-white px-4 py-2 text-lg text-sh-navy shadow-[0_3px_0_rgb(0_0_0/0.35)] ${celebrate ? "sh-rise" : ""} ${celebrate && index === 0 ? "sh-rise-winner" : ""}`}
         >
           <span className="flex min-w-0 items-center gap-3">
             <span className="w-6 text-right tabular-nums">{index + 1}</span>
@@ -159,6 +176,15 @@ function Leaderboard({ board, limit }: { board: ClientGame["board"]; limit: numb
       ))}
     </ol>
   );
+}
+
+/** Remounts on every phase or question change so the content fades in fresh. */
+function Phase({ children }: { children: ReactNode }) {
+  return <div className="sh-phase flex flex-1 flex-col gap-5">{children}</div>;
+}
+
+function phaseKey(game: ClientGame): string {
+  return `${game.phase}-${game.index}`;
 }
 
 export function HostGame({ game, onNext }: { game: ClientGame; onNext: () => void }) {
@@ -172,18 +198,20 @@ export function HostGame({ game, onNext }: { game: ClientGame; onNext: () => voi
           <span>{game.title}</span>
           <span>PIN {game.pin}</span>
         </Bar>
-        <h1 className="text-center text-4xl font-black">Final results</h1>
-        {podium.length > 0 ? (
-          <p className="text-center text-2xl">
-            🏆 {podium[0]?.nickname} wins with {podium[0]?.score} points
-          </p>
-        ) : null}
-        <Leaderboard board={game.board} limit={game.board.length} />
-        <div className="mt-auto flex justify-center pb-4">
-          <GoldButton type="button" className="sh-gold-join max-w-80" onClick={onNext}>
-            Back to lobby
-          </GoldButton>
-        </div>
+        <Phase key={phaseKey(game)}>
+          <h1 className="text-center text-4xl font-black">Final results</h1>
+          {podium.length > 0 ? (
+            <p className="sh-pop text-center text-2xl" style={{ animationDelay: "240ms" }}>
+              🏆 {podium[0]?.nickname} wins with {podium[0]?.score} points
+            </p>
+          ) : null}
+          <Leaderboard board={game.board} limit={game.board.length} celebrate />
+          <div className="mt-auto flex justify-center pb-4">
+            <GoldButton type="button" className="sh-gold-join max-w-80" onClick={onNext}>
+              Back to lobby
+            </GoldButton>
+          </div>
+        </Phase>
       </Frame>
     );
   }
@@ -200,28 +228,30 @@ export function HostGame({ game, onNext }: { game: ClientGame; onNext: () => voi
         <span>PIN {game.pin}</span>
         {showResults ? null : <Countdown game={game} />}
       </Bar>
-      {question ? (
-        <>
-          <div className="flex flex-col items-center gap-3">
-            <PointsBadge question={question} />
-            <h1 className="w-full rounded-md bg-white px-6 py-8 text-center text-3xl text-sh-navy shadow-[0_4px_0_var(--sh-navy)] sm:text-4xl">
-              {question.text}
-            </h1>
-          </div>
-          <QuestionImage question={question} />
-          <HostAnswers game={game} question={question} showResults={showResults} />
-          {showResults ? <HostSummary game={game} question={question} /> : null}
-        </>
-      ) : null}
-      {showResults ? <Leaderboard board={game.board} limit={5} /> : null}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 pb-4">
-        <p role="status" className="text-lg">
-          {showResults ? "" : `${game.answered} of ${game.playerCount} answered`}
-        </p>
-        <GoldButton type="button" className="sh-gold-join max-w-80" onClick={onNext}>
-          {showResults ? (isLast ? "Final results" : "Next question") : "Skip to answers"}
-        </GoldButton>
-      </div>
+      <Phase key={phaseKey(game)}>
+        {question ? (
+          <>
+            <div className="flex flex-col items-center gap-3">
+              <PointsBadge question={question} />
+              <h1 className="w-full rounded-md bg-white px-6 py-8 text-center text-3xl text-sh-navy shadow-[0_4px_0_var(--sh-navy)] sm:text-4xl">
+                {question.text}
+              </h1>
+            </div>
+            <QuestionImage question={question} />
+            <HostAnswers game={game} question={question} showResults={showResults} />
+            {showResults ? <HostSummary game={game} question={question} /> : null}
+          </>
+        ) : null}
+        {showResults ? <Leaderboard board={game.board} limit={5} /> : null}
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-4 pb-4">
+          <p role="status" className="text-lg">
+            {showResults ? "" : `${game.answered} of ${game.playerCount} answered`}
+          </p>
+          <GoldButton type="button" className="sh-gold-join max-w-80" onClick={onNext}>
+            {showResults ? (isLast ? "Final results" : "Next question") : "Skip to answers"}
+          </GoldButton>
+        </div>
+      </Phase>
     </Frame>
   );
 }
@@ -249,7 +279,7 @@ function HostAnswers({
           return (
             <li
               key={index}
-              className={`flex min-h-24 items-center gap-4 rounded-md px-5 py-4 text-xl shadow-[0_4px_0_rgb(0_0_0/0.35)] ${style.className} ${dimmed ? "opacity-40" : ""}`}
+              className={`sh-tile flex min-h-24 items-center gap-4 rounded-md px-5 py-4 text-xl shadow-[0_4px_0_rgb(0_0_0/0.35)] ${style.className} ${dimmed ? "opacity-40" : ""} ${showResults && hasAnswer && right ? "sh-reveal" : ""}`}
             >
               <span aria-label={style.name} className="text-3xl">
                 {style.shape}
@@ -352,25 +382,30 @@ function OptionTiles({
   question,
   picked,
   onPick,
+  locked = false,
 }: {
   question: GameQuestion;
   picked: number[];
   onPick: (index: number) => void;
+  /** The answer is sent: tiles stop responding and the unpicked ones dim. */
+  locked?: boolean;
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {question.options.map((option, index) => {
         const style = optionStyle(index);
         const on = picked.includes(index);
+        const fade = locked ? (on ? "" : "opacity-40") : question.type === "multi" && !on ? "opacity-60" : "";
         return (
           <button
             key={index}
             type="button"
-            aria-pressed={question.type === "multi" ? on : undefined}
+            disabled={locked}
+            aria-pressed={question.type === "multi" || locked ? on : undefined}
             onClick={() => {
               onPick(index);
             }}
-            className={`flex min-h-24 items-center gap-4 rounded-md px-5 py-4 text-left text-xl shadow-[0_4px_0_rgb(0_0_0/0.35)] active:translate-y-0.5 ${style.className} ${question.type === "multi" && !on ? "opacity-60" : ""} ${on ? "ring-4 ring-white" : ""}`}
+            className={`sh-tile flex min-h-24 items-center gap-4 rounded-md px-5 py-4 text-left text-xl shadow-[0_4px_0_rgb(0_0_0/0.35)] ${style.className} ${fade} ${on ? "ring-4 ring-white" : ""}`}
           >
             <span aria-label={style.name} className="text-3xl">
               {style.shape}
@@ -384,7 +419,15 @@ function OptionTiles({
   );
 }
 
-function MultiInput({ question, onAnswer }: { question: GameQuestion; onAnswer: (answer: AnswerValue) => void }) {
+function MultiInput({
+  question,
+  locked,
+  onAnswer,
+}: {
+  question: GameQuestion;
+  locked: boolean;
+  onAnswer: (answer: AnswerValue) => void;
+}) {
   const [picked, setPicked] = useState<number[]>([]);
   return (
     <form
@@ -400,13 +443,14 @@ function MultiInput({ question, onAnswer }: { question: GameQuestion; onAnswer: 
       <OptionTiles
         question={question}
         picked={picked}
+        locked={locked}
         onPick={(index) => {
           setPicked((current) =>
             current.includes(index) ? current.filter((value) => value !== index) : [...current, index],
           );
         }}
       />
-      <SubmitButton disabled={picked.length === 0} />
+      {locked ? null : <SubmitButton disabled={picked.length === 0} />}
     </form>
   );
 }
@@ -534,7 +578,7 @@ function OrderInput({ question, onAnswer }: { question: GameQuestion; onAnswer: 
               type="button"
               aria-label={`Move ${question.items[shown]} up`}
               disabled={position === 0}
-              className="grid size-10 place-items-center rounded bg-sh-navy text-white disabled:opacity-30"
+              className="sh-press grid size-10 place-items-center rounded bg-sh-navy text-white disabled:opacity-30"
               onClick={() => {
                 move(position, position - 1);
               }}
@@ -545,7 +589,7 @@ function OrderInput({ question, onAnswer }: { question: GameQuestion; onAnswer: 
               type="button"
               aria-label={`Move ${question.items[shown]} down`}
               disabled={position === order.length - 1}
-              className="grid size-10 place-items-center rounded bg-sh-navy text-white disabled:opacity-30"
+              className="sh-press grid size-10 place-items-center rounded bg-sh-navy text-white disabled:opacity-30"
               onClick={() => {
                 move(position, position + 1);
               }}
@@ -603,11 +647,27 @@ function PairsInput({ question, onAnswer }: { question: GameQuestion; onAnswer: 
   );
 }
 
+/** Question types answered by tapping option tiles. These stay on screen, dimmed, after locking in. */
+function hasTiles(question: GameQuestion): boolean {
+  return question.type === "choice" || question.type === "poll" || question.type === "multi";
+}
+
+function pickedIndices(choice: AnswerValue | null | undefined): number[] {
+  if (typeof choice === "number") {
+    return [choice];
+  }
+  return Array.isArray(choice) ? choice : [];
+}
+
 function AnswerInput({
   question,
+  locked,
+  choice,
   onAnswer,
 }: {
   question: GameQuestion;
+  locked: boolean;
+  choice: AnswerValue | null | undefined;
   onAnswer: (answer: AnswerValue) => void;
 }) {
   switch (question.type) {
@@ -615,11 +675,16 @@ function AnswerInput({
     case "poll":
       return (
         <div className="flex-1">
-          <OptionTiles question={question} picked={[]} onPick={onAnswer} />
+          <OptionTiles
+            question={question}
+            picked={locked ? pickedIndices(choice) : []}
+            locked={locked}
+            onPick={onAnswer}
+          />
         </div>
       );
     case "multi":
-      return <MultiInput question={question} onAnswer={onAnswer} />;
+      return <MultiInput question={question} locked={locked} onAnswer={onAnswer} />;
     case "text":
       return <TextInput onAnswer={onAnswer} />;
     case "slider":
@@ -640,31 +705,82 @@ export function PlayerGame({
   game: ClientGame;
   onAnswer: (answer: AnswerValue) => void;
 }) {
+  return (
+    <Frame>
+      <Phase key={phaseKey(game)}>
+        <PlayerPhase game={game} onAnswer={onAnswer} />
+      </Phase>
+      {/* Outside the phase wrapper so it stays mounted and the score can count up. */}
+      <footer className="mt-auto flex items-center justify-between gap-4 rounded-md bg-sh-navy px-5 py-3 text-xl shadow-[inset_0_-3px_0_rgb(0_0_0/0.3)]">
+        <span className="truncate">{game.me?.nickname}</span>
+        <ScoreChip score={game.me?.score ?? 0} />
+      </footer>
+    </Frame>
+  );
+}
+
+const COUNT_UP_MS = 600;
+
+/** Counts up to the new score and nudges once whenever it changes. */
+function ScoreChip({ score }: { score: number }) {
+  const [shown, setShown] = useState(score);
+  const chip = useRef<HTMLSpanElement>(null);
+  const current = useRef(score);
+
+  useEffect(() => {
+    const start = current.current;
+    if (start === score) {
+      return;
+    }
+
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduce) {
+      chip.current?.animate(
+        [{ transform: "scale(1)" }, { transform: "scale(1.08)" }, { transform: "scale(1)" }],
+        { duration: 300, easing: "cubic-bezier(0.23, 1, 0.32, 1)" },
+      );
+    }
+
+    const duration = reduce ? 0 : COUNT_UP_MS;
+    const began = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const progress = duration === 0 ? 1 : Math.min(1, (now - began) / duration);
+      const eased = 1 - (1 - progress) ** 3;
+      const value = Math.round(start + (score - start) * eased);
+      current.current = value;
+      setShown(value);
+      if (progress < 1) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [score]);
+
+  return (
+    <span ref={chip} className="inline-block rounded-md bg-sh-gold px-4 py-1 tabular-nums" aria-label={`Score ${score}`}>
+      {shown}
+    </span>
+  );
+}
+
+function PlayerPhase({ game, onAnswer }: { game: ClientGame; onAnswer: (answer: AnswerValue) => void }) {
   const me = game.me;
   const question = game.question;
 
-  const footer = (
-    <footer className="mt-auto flex items-center justify-between gap-4 rounded-md bg-sh-navy px-5 py-3 text-xl shadow-[inset_0_-3px_0_rgb(0_0_0/0.3)]">
-      <span className="truncate">{me?.nickname}</span>
-      <span className="rounded-md bg-sh-gold px-4 py-1 tabular-nums" aria-label={`Score ${me?.score ?? 0}`}>
-        {me?.score ?? 0}
-      </span>
-    </footer>
-  );
-
   if (game.phase === "podium") {
     return (
-      <Frame>
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-          <Logo className="sh-logo-join" />
-          <h1 className="text-4xl font-black">You finished #{me?.rank}</h1>
-          <p className="text-2xl tabular-nums">{me?.score ?? 0} points</p>
-          <p role="status" className="text-lg">
-            Waiting for the host…
-          </p>
-        </div>
-        {footer}
-      </Frame>
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+        <Logo className="sh-logo-join" />
+        <h1 className="sh-pop text-4xl font-black">You finished #{me?.rank}</h1>
+        <p className="text-2xl tabular-nums">{me?.score ?? 0} points</p>
+        <p role="status" className="text-lg">
+          Waiting for the host…
+        </p>
+      </div>
     );
   }
 
@@ -685,29 +801,31 @@ export function PlayerGame({
             : "Incorrect";
     const answer = question ? describeReveal(question) : "";
     return (
-      <Frame>
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-          <h1 role="status" className="text-5xl font-black">
-            {headline}
-          </h1>
-          {isPoll ? null : <p className="text-3xl tabular-nums">+{gained}</p>}
-          {question?.points === "none" && !isPoll ? <p className="text-lg">No points on this one</p> : null}
-          <p className="text-xl">
-            You are #{me?.rank} of {game.playerCount}
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+        <h1 role="status" className="sh-pop text-5xl font-black">
+          {headline}
+        </h1>
+        {isPoll ? null : (
+          <p className="sh-pop text-3xl tabular-nums" style={{ animationDelay: "80ms" }}>
+            +{gained}
           </p>
-          {answer !== "" && !me?.correct ? (
-            <p className="rounded-md bg-sh-navy px-4 py-2 text-lg">Right answer: {answer}</p>
-          ) : null}
-          {question ? <Explanation question={question} /> : null}
-        </div>
-        {footer}
-      </Frame>
+        )}
+        {question?.points === "none" && !isPoll ? <p className="text-lg">No points on this one</p> : null}
+        <p className="text-xl">
+          You are #{me?.rank} of {game.playerCount}
+        </p>
+        {answer !== "" && !me?.correct ? (
+          <p className="rounded-md bg-sh-navy px-4 py-2 text-lg">Right answer: {answer}</p>
+        ) : null}
+        {question ? <Explanation question={question} /> : null}
+      </div>
     );
   }
 
   const answered = me?.answered ?? false;
+  const keepTiles = question ? hasTiles(question) : false;
   return (
-    <Frame>
+    <>
       <Bar>
         <span>
           {game.index + 1} / {game.total}
@@ -725,14 +843,25 @@ export function PlayerGame({
           <QuestionImage question={question} />
         </>
       ) : null}
+      {question && (!answered || keepTiles) ? (
+        <AnswerInput
+          key={game.index}
+          question={question}
+          locked={answered}
+          choice={me?.choice}
+          onAnswer={onAnswer}
+        />
+      ) : null}
       {answered ? (
-        <p role="status" className="flex flex-1 items-center justify-center text-center text-2xl">
+        <p
+          role="status"
+          className={
+            keepTiles ? "sh-pop text-center text-xl" : "flex flex-1 items-center justify-center text-center text-2xl"
+          }
+        >
           Answer locked in. Waiting for the others…
         </p>
-      ) : question ? (
-        <AnswerInput key={game.index} question={question} onAnswer={onAnswer} />
       ) : null}
-      {footer}
-    </Frame>
+    </>
   );
 }

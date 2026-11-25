@@ -18,6 +18,10 @@
   --accent: var(--sh-gold);
   --accent-hover: var(--sh-gold-hover);
   --muted: rgb(255 255 255 / 0.75);
+  /* Motion: strong ease-out for UI, overshoot only for the podium winner. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 @theme inline {
@@ -328,10 +332,28 @@ body {
   font-weight: 700;
   box-shadow: inset 0 -4px 0 rgb(0 0 0 / 0.3);
   cursor: pointer;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 150ms ease;
 }
 
-.sh-gold:hover:not(:disabled) {
-  background: var(--sh-gold-hover);
+@media (hover: hover) and (pointer: fine) {
+  .sh-gold:hover:not(:disabled) {
+    background: var(--sh-gold-hover);
+  }
+}
+
+.sh-gold:active:not(:disabled),
+.sh-press:active:not(:disabled),
+.sh-qr-button:active,
+.sh-bar-button:active {
+  transform: scale(0.97);
+}
+
+.sh-press,
+.sh-qr-button,
+.sh-bar-button {
+  transition: transform 160ms var(--ease-out);
 }
 
 .sh-gold:disabled {
@@ -633,10 +655,25 @@ body {
   border-radius: 8px;
   background: var(--sh-white);
   margin: auto;
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
 }
 
 .sh-qr-dialog::backdrop {
   background: rgb(0 0 0 / 0.65);
+  transition: opacity 200ms var(--ease-out);
+}
+
+@starting-style {
+  .sh-qr-dialog[open] {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  .sh-qr-dialog[open]::backdrop {
+    opacity: 0;
+  }
 }
 
 .sh-qr-modal {
@@ -721,6 +758,16 @@ body {
   font-size: 22px;
   font-weight: 700;
   line-height: 1.2;
+  transition:
+    opacity 250ms var(--ease-out),
+    transform 250ms var(--ease-out);
+}
+
+@starting-style {
+  .sh-player-chip {
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+  }
 }
 
 .sh-topbar,
@@ -932,4 +979,104 @@ body {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.3px;
+}
+
+/* ---------- Motion ---------- */
+
+/* Answer tiles: press feedback plus a soft dim when a choice locks in. */
+.sh-tile {
+  transition:
+    transform 160ms var(--ease-out),
+    opacity 200ms var(--ease-out);
+}
+
+.sh-tile:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.sh-tile:disabled {
+  cursor: default;
+}
+
+/* Countdown: constant motion, so linear. clip-path keeps the rounded ends intact. */
+.sh-timer {
+  transition: clip-path 200ms linear;
+}
+
+/* Each new phase (question, results, podium) fades in; blur hides the swap. */
+.sh-phase {
+  animation: sh-phase-in 200ms var(--ease-out) both;
+}
+
+@keyframes sh-phase-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
+/* The right answer gets one pulse on reveal. */
+.sh-reveal {
+  animation: sh-pulse 300ms var(--ease-in-out) 150ms both;
+}
+
+@keyframes sh-pulse {
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+/* Headline payoff on the phone: "Correct!", "+800", "You finished #2". */
+.sh-pop {
+  animation: sh-pop 300ms var(--ease-out) both;
+}
+
+@keyframes sh-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* Podium rows rise in; delays come from the component. */
+.sh-rise {
+  animation: sh-rise 400ms var(--ease-out) both;
+}
+
+.sh-rise-winner {
+  animation-timing-function: var(--ease-bounce);
+}
+
+@keyframes sh-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@keyframes sh-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion: keep fades that aid comprehension, drop movement. */
+@media (prefers-reduced-motion: reduce) {
+  .sh-pop,
+  .sh-rise {
+    animation-name: sh-fade;
+  }
+
+  .sh-reveal {
+    animation: none;
+  }
+
+  .sh-player-chip,
+  .sh-qr-dialog {
+    transition-property: opacity;
+  }
+
+  .sh-timer {
+    transition: none;
+  }
 }

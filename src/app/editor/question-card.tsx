@@ -128,9 +128,11 @@ export function QuestionCard({ draft, index, canRemove, onChange, onRemove }: Pr
           </button>
         </div>
       ))}
-      <button type="button" className={ADD_BUTTON} disabled={draft.options.length >= OPTIONS_MAX} onClick={addOption}>
-        <Plus aria-hidden="true" size={16} /> Add answer
-      </button>
+      {draft.options.length < OPTIONS_MAX ? (
+        <button type="button" className={ADD_BUTTON} onClick={addOption}>
+          <Plus aria-hidden="true" size={16} /> Add answer
+        </button>
+      ) : null}
     </>
   );
 

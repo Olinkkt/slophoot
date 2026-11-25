@@ -8,6 +8,16 @@ export const JOIN_ERRORS = {
   nicknameTooLong: "Nickname must be 20 characters or fewer.",
   duplicateNickname: "That nickname is already taken.",
   invalidRequest: "Invalid join request.",
+  gameStarted: "That game has already started.",
+} as const;
+
+export const GAME_ERRORS = {
+  notHost: "Only the host can do that.",
+  noPlayers: "Wait for at least one player to join.",
+  noQuiz: "That quiz no longer exists.",
+  quizFailed: "Couldn't load the quiz. Try again.",
+  alreadyStarted: "The game has already started.",
+  invalid: "Invalid game request.",
 } as const;
 
 export const HOST_ERRORS = {

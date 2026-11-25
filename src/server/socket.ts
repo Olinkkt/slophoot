@@ -1,12 +1,17 @@
 import type { Server, Socket } from "socket.io";
 import type {
   ClientToServerEvents,
+  HostNextPayload,
   HostResumePayload,
+  HostStartPayload,
   LobbyUpdate,
+  PlayerAnswerPayload,
   PlayerJoinPayload,
   ServerToClientEvents,
 } from "../shared/events";
-import { HOST_ERRORS, JOIN_ERRORS } from "../shared/validation";
+import { GAME_ERRORS, HOST_ERRORS, JOIN_ERRORS, normalizePin } from "../shared/validation";
+import { createGameManager, type GameQuiz } from "./game";
+import { getQuizStore } from "./quizzes";
 import { createCreateLimiter, type CreateLimiter } from "./rate-limit";
 import {
   NO_FREE_PIN_MESSAGE,
@@ -25,6 +30,9 @@ export const HOST_RECONNECT_GRACE_MS = 12_000;
 
 export type AttachOptions = {
   graceMs?: number;
+  /** Looks up a quiz by id. Defaults to the SQLite quiz store. */
+  findQuiz?: (id: string) => GameQuiz | null;
+  now?: () => number;
 };
 
 function channel(pin: string): string {
@@ -56,6 +64,32 @@ function isJoinPayload(payload: unknown): payload is PlayerJoinPayload {
   return typeof record.pin === "string" && typeof record.nickname === "string";
 }
 
+function isStartPayload(payload: unknown): payload is HostStartPayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const record = payload as Record<string, unknown>;
+  return typeof record.pin === "string" && typeof record.quizId === "string";
+}
+
+function isNextPayload(payload: unknown): payload is HostNextPayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  return typeof (payload as Record<string, unknown>).pin === "string";
+}
+
+function isAnswerPayload(payload: unknown): payload is PlayerAnswerPayload {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const record = payload as Record<string, unknown>;
+  return typeof record.pin === "string" && typeof record.choice === "number";
+}
+
 function closeChannel(io: GameServer, pin: string, except?: GameSocket): void {
   const roomChannel = channel(pin);
   const target = except ? except.to(roomChannel) : io.to(roomChannel);
@@ -67,9 +101,10 @@ function announceDisplacement(
   io: GameServer,
   socket: GameSocket,
   displaced: DisconnectResult,
+  close: (pin: string, except?: GameSocket) => void,
 ): void {
   if (displaced.type === "room_closed") {
-    closeChannel(io, displaced.pin, socket);
+    close(displaced.pin, socket);
     return;
   }
 
@@ -97,6 +132,54 @@ export function attachGameServer(
     { timer: ReturnType<typeof setTimeout>; reservationSocketId: string }
   >();
   let stopped = false;
+
+  const findQuiz = options.findQuiz ?? ((id: string) => getQuizStore().get(id));
+
+  function broadcastGame(pin: string): void {
+    const room = store.getRoom(pin);
+    if (!room) {
+      return;
+    }
+
+    if (room.hostSocketId.length > 0) {
+      const state = games.stateFor(pin, "host");
+      if (state) {
+        io.to(room.hostSocketId).emit("game:state", state);
+      }
+    }
+
+    for (const player of room.players) {
+      const state = games.stateFor(pin, { socketId: player.socketId });
+      if (state) {
+        io.to(player.socketId).emit("game:state", state);
+      }
+    }
+  }
+
+  const games = createGameManager({
+    now: options.now,
+    onChange: broadcastGame,
+    onEnd(pin) {
+      const room = store.getRoom(pin);
+      if (!room) {
+        return;
+      }
+
+      io.to(channel(pin)).emit("game:ended");
+      io.to(channel(pin)).emit("lobby:update", toLobby(room));
+    },
+  });
+
+  function closeRoom(pin: string, except?: GameSocket): void {
+    games.dispose(pin);
+    closeChannel(io, pin, except);
+  }
+
+  function hostedRoom(socket: GameSocket, pinInput: string): Room | null {
+    const pin = normalizePin(pinInput);
+    const room = pin ? store.getRoom(pin) : null;
+    return room && room.hostSocketId === socket.id ? room : null;
+  }
 
   function clearGrace(pin: string): string | null {
     const pending = graceTimers.get(pin);
@@ -133,7 +216,7 @@ export function attachGameServer(
       }
 
       limiter.release(reservationSocketId);
-      closeChannel(io, pin);
+      closeRoom(pin);
     }, graceMs);
     timer.unref();
     graceTimers.set(pin, { timer, reservationSocketId });
@@ -151,6 +234,7 @@ export function attachGameServer(
       clearTimeout(pending.timer);
     }
     graceTimers.clear();
+    games.disposeAll();
   });
 
   io.on("connection", (socket) => {
@@ -169,7 +253,7 @@ export function attachGameServer(
             limiter.release(reservationSocketId);
           }
         }
-        announceDisplacement(io, socket, displaced);
+        announceDisplacement(io, socket, displaced, closeRoom);
         void socket.join(channel(room.pin));
         socket.emit("host:ready", { pin: room.pin, token });
         socket.emit("lobby:update", toLobby(room));
@@ -218,11 +302,21 @@ export function attachGameServer(
       void socket.join(roomChannel);
       socket.emit("host:ready", { pin: result.room.pin, token: result.token });
       socket.emit("lobby:update", toLobby(result.room));
+      const gameState = games.stateFor(result.room.pin, "host");
+      if (gameState) {
+        socket.emit("game:state", gameState);
+      }
     });
 
     socket.on("player:join", (payload: PlayerJoinPayload) => {
       if (!isJoinPayload(payload)) {
         socket.emit("join:error", { message: JOIN_ERRORS.invalidRequest });
+        return;
+      }
+
+      const targetPin = normalizePin(payload.pin);
+      if (targetPin && games.has(targetPin)) {
+        socket.emit("join:error", { message: JOIN_ERRORS.gameStarted });
         return;
       }
 
@@ -235,13 +329,14 @@ export function attachGameServer(
       if (result.closedPin) {
         const reservationSocketId = clearGrace(result.closedPin);
         limiter.release(reservationSocketId ?? socket.id);
-        closeChannel(io, result.closedPin, socket);
+        closeRoom(result.closedPin, socket);
       }
 
       if (result.previousRoom) {
         const previousChannel = channel(result.previousRoom.pin);
         void socket.leave(previousChannel);
         io.to(previousChannel).emit("lobby:update", toLobby(result.previousRoom));
+        games.removePlayer(result.previousRoom.pin, socket.id);
       }
 
       const roomChannel = channel(result.room.pin);
@@ -249,6 +344,72 @@ export function attachGameServer(
       io.to(roomChannel).emit("lobby:update", toLobby(result.room));
       if (store.isHostAway(result.room.pin)) {
         socket.emit("lobby:hostReconnecting");
+      }
+    });
+
+    socket.on("host:start", (payload: HostStartPayload) => {
+      if (!isStartPayload(payload)) {
+        socket.emit("game:error", { message: GAME_ERRORS.invalid });
+        return;
+      }
+
+      const room = hostedRoom(socket, payload.pin);
+      if (!room) {
+        socket.emit("game:error", { message: GAME_ERRORS.notHost });
+        return;
+      }
+
+      if (games.has(room.pin)) {
+        socket.emit("game:error", { message: GAME_ERRORS.alreadyStarted });
+        return;
+      }
+
+      if (room.players.length === 0) {
+        socket.emit("game:error", { message: GAME_ERRORS.noPlayers });
+        return;
+      }
+
+      let quiz: GameQuiz | null;
+      try {
+        quiz = findQuiz(payload.quizId);
+      } catch (error: unknown) {
+        console.error("Failed to load quiz", error);
+        socket.emit("game:error", { message: GAME_ERRORS.quizFailed });
+        return;
+      }
+
+      if (!quiz) {
+        socket.emit("game:error", { message: GAME_ERRORS.noQuiz });
+        return;
+      }
+
+      games.start(
+        room.pin,
+        { title: quiz.title, questions: quiz.questions },
+        room.players.map((player) => ({ socketId: player.socketId, nickname: player.nickname })),
+      );
+    });
+
+    socket.on("host:next", (payload: HostNextPayload) => {
+      if (!isNextPayload(payload)) {
+        return;
+      }
+
+      const room = hostedRoom(socket, payload.pin);
+      if (room) {
+        games.next(room.pin);
+      }
+    });
+
+    socket.on("player:answer", (payload: PlayerAnswerPayload) => {
+      if (!isAnswerPayload(payload)) {
+        return;
+      }
+
+      const pin = normalizePin(payload.pin);
+      const room = pin ? store.getRoom(pin) : null;
+      if (room && room.players.some((player) => player.socketId === socket.id)) {
+        games.answer(room.pin, socket.id, payload.choice);
       }
     });
 
@@ -273,12 +434,13 @@ export function attachGameServer(
         limiter.forget(socket.id);
       }
       if (result.type === "room_closed") {
-        closeChannel(io, result.pin);
+        closeRoom(result.pin);
         return;
       }
 
       if (result.type === "player_left") {
         io.to(channel(result.room.pin)).emit("lobby:update", toLobby(result.room));
+        games.removePlayer(result.room.pin, socket.id);
       }
     });
   });

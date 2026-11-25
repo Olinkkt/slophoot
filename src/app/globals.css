@@ -789,3 +789,13 @@ body {
     transform: none;
   }
 }
+
+.sh-badge {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: var(--sh-gold);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}

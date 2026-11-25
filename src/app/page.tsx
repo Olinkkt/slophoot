@@ -5,7 +5,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState, type FormEven
 import { PlayerGame, type ClientGame } from "@/components/game";
 import { GoldButton, Logo, Stage } from "@/components/stage";
 import { useSocket } from "@/lib/socket";
-import type { GameState, JoinErrorPayload, LobbyUpdate } from "@/shared/events";
+import type { AnswerValue, GameState, JoinErrorPayload, LobbyUpdate } from "@/shared/events";
 import {
   JOIN_ERRORS,
   NICKNAME_MAX_LENGTH,
@@ -234,7 +234,7 @@ export default function JoinPage() {
   );
 
   const answer = useCallback(
-    (choice: number) => {
+    (choice: AnswerValue) => {
       if (!socket || !socket.connected || !joinedPinRef.current) {
         return;
       }

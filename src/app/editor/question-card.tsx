@@ -367,7 +367,7 @@ export function QuestionCard({ draft, index, canRemove, onChange, onRemove }: Pr
           ) : null}
         </div>
       </div>
-      <p className="text-sm text-[#555]">{TYPE_HINTS[draft.type]}</p>
+      <p className="-mt-2 text-sm text-[#555]">{TYPE_HINTS[draft.type]}</p>
       <input
         className={INPUT}
         aria-label={`${label} text`}

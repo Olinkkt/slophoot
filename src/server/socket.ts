@@ -87,7 +87,7 @@ function isAnswerPayload(payload: unknown): payload is PlayerAnswerPayload {
   }
 
   const record = payload as Record<string, unknown>;
-  return typeof record.pin === "string" && typeof record.choice === "number";
+  return typeof record.pin === "string" && "choice" in record;
 }
 
 function closeChannel(io: GameServer, pin: string, except?: GameSocket): void {

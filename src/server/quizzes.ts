@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { QuizInput, QuizQuestion, QuizSummary } from "../shared/events";
 import { randomUUID } from "node:crypto";
+import { validateQuizInput } from "../shared/quiz";
 
 export type StoredQuiz = {
   id: string;
@@ -24,18 +25,24 @@ const DEMO_QUIZ: QuizInput = {
   questions: [
     {
       text: "What is the capital of France?",
+      type: "choice",
+      points: "standard",
       options: ["Lyon", "Paris", "Marseille", "Nice"],
       correct: 1,
       time: 15,
     },
     {
       text: "What is 7 × 8?",
+      type: "choice",
+      points: "standard",
       options: ["54", "56", "58", "64"],
       correct: 1,
       time: 15,
     },
     {
       text: "Which planet is closest to the Sun?",
+      type: "choice",
+      points: "standard",
       options: ["Venus", "Earth", "Mercury", "Mars"],
       correct: 2,
       time: 15,
@@ -68,7 +75,13 @@ export function createQuizStore(path: string): QuizStore {
   function parseQuestions(raw: unknown): QuizQuestion[] {
     try {
       const parsed: unknown = JSON.parse(String(raw));
-      return Array.isArray(parsed) ? (parsed as QuizQuestion[]) : [];
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      // Quizzes saved before question types existed have neither `type` nor `points`.
+      const result = validateQuizInput({ title: "stored", questions: parsed });
+      return result.ok ? result.quiz.questions : [];
     } catch {
       return [];
     }

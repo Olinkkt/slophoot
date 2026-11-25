@@ -4,7 +4,7 @@ import type { QuizQuestion } from "../shared/events";
 import { createGameManager, pointsFor } from "./game";
 
 function question(correct = 1, time = 10): QuizQuestion {
-  return { text: "Q", options: ["a", "b", "c", "d"], correct, time };
+  return { type: "choice", points: "standard", text: "Q", options: ["a", "b", "c", "d"], correct, time };
 }
 
 function setup(questions: QuizQuestion[] = [question(), question(2)]) {
@@ -70,7 +70,7 @@ describe("game manager", () => {
     assert.deepEqual(changes, ["1234"]);
     const host = manager.stateFor("1234", "host");
     assert.equal(host?.phase, "question");
-    assert.equal(host?.question?.correct, null);
+    assert.equal(host?.question?.reveal, null);
     assert.equal(host?.leftMs, 10_000);
     assert.equal(host?.me, null);
     assert.equal(host?.counts, null);
@@ -88,7 +88,7 @@ describe("game manager", () => {
 
     const host = manager.stateFor("1234", "host");
     assert.equal(host?.phase, "results");
-    assert.equal(host?.question?.correct, 1);
+    assert.deepEqual(host?.question?.reveal, { type: "choice", correct: 1 });
     assert.deepEqual(host?.counts, [1, 1, 0, 0]);
     assert.deepEqual(host?.board, [
       { nickname: "Ann", score: 950 },
@@ -198,5 +198,117 @@ describe("game manager", () => {
     manager.dispose("5555");
     await new Promise((resolve) => setTimeout(resolve, 150));
     assert.deepEqual(changes, ["5555"]);
+  });
+});
+
+describe("question types in a game", () => {
+  it("doubles points, and gives none for no-points questions", () => {
+    const { manager } = setup([
+      { ...question(1), points: "double" },
+      { ...question(1), points: "none" },
+    ]);
+    manager.answer("1234", "a", 1);
+    manager.answer("1234", "b", 1);
+    assert.equal(manager.stateFor("1234", { socketId: "a" })?.me?.gained, 2000);
+    manager.next("1234");
+    manager.answer("1234", "a", 1);
+    manager.answer("1234", "b", 1);
+    const ann = manager.stateFor("1234", { socketId: "a" });
+    assert.equal(ann?.me?.correct, true);
+    assert.equal(ann?.me?.gained, 0);
+    assert.equal(ann?.me?.score, 2000);
+    manager.disposeAll();
+  });
+
+  it("polls give no points, reveal no answer, keep streaks, and count votes", () => {
+    const { manager } = setup([
+      question(1),
+      { type: "poll", points: "none", text: "Vote", options: ["x", "y"], time: 10 },
+      question(1),
+    ]);
+    manager.answer("1234", "a", 1);
+    manager.answer("1234", "b", 1);
+    manager.next("1234");
+    manager.answer("1234", "a", 0);
+    manager.answer("1234", "b", 0);
+    const poll = manager.stateFor("1234", "host");
+    assert.deepEqual(poll?.counts, [2, 0]);
+    assert.equal(poll?.correctCount, null);
+    assert.deepEqual(poll?.question?.reveal, { type: "poll" });
+    assert.equal(manager.stateFor("1234", { socketId: "a" })?.me?.correct, null);
+    manager.next("1234");
+    manager.answer("1234", "a", 1);
+    manager.answer("1234", "b", 1);
+    // Streak survived the poll: this is the second correct answer in a row.
+    assert.equal(manager.stateFor("1234", { socketId: "a" })?.me?.gained, 1100);
+    manager.disposeAll();
+  });
+
+  it("grades multi, text, and slider questions with partial credit", () => {
+    const { manager } = setup([
+      { type: "multi", points: "standard", text: "M", options: ["a", "b", "c", "d"], correct: [0, 1], time: 10 },
+      { type: "text", points: "standard", text: "T", answers: ["Paris"], time: 10 },
+      { type: "slider", points: "standard", text: "S", min: 0, max: 100, correct: 50, tolerance: 10, time: 10 },
+    ]);
+    manager.answer("1234", "a", [0, 1]);
+    manager.answer("1234", "b", [0]);
+    const multi = manager.stateFor("1234", "host");
+    assert.equal(multi?.correctCount, 1);
+    assert.deepEqual(multi?.counts, [2, 1, 0, 0]);
+    assert.equal(manager.stateFor("1234", { socketId: "b" })?.me?.gained, 500);
+
+    manager.next("1234");
+    manager.answer("1234", "a", "paris");
+    manager.answer("1234", "b", "london");
+    assert.equal(manager.stateFor("1234", "host")?.correctCount, 1);
+    assert.equal(manager.stateFor("1234", "host")?.counts, null);
+
+    manager.next("1234");
+    manager.answer("1234", "a", 50);
+    manager.answer("1234", "b", 70);
+    assert.equal(manager.stateFor("1234", { socketId: "b" })?.me?.correct, false);
+    assert.equal(manager.stateFor("1234", { socketId: "a" })?.me?.correct, true);
+    manager.disposeAll();
+  });
+
+  it("shows order and pair items shuffled and hides the answer until the end", () => {
+    const { manager } = setup([
+      { type: "order", points: "standard", text: "O", items: ["one", "two", "three"], time: 10 },
+      {
+        type: "pairs",
+        points: "standard",
+        text: "P",
+        pairs: [
+          { left: "a", right: "1" },
+          { left: "b", right: "2" },
+          { left: "c", right: "3" },
+        ],
+        time: 10,
+      },
+    ]);
+    const order = manager.stateFor("1234", "host")?.question;
+    assert.deepEqual([...(order?.items ?? [])].sort(), ["one", "three", "two"]);
+    assert.notDeepEqual(order?.items, ["one", "two", "three"]);
+    assert.equal(order?.reveal, null);
+
+    // Answer with the shown items sorted back into the authored order.
+    const shown = order?.items ?? [];
+    const right = ["one", "two", "three"].map((item) => shown.indexOf(item));
+    manager.answer("1234", "a", right);
+    manager.answer("1234", "b", [0, 1, 2]);
+    assert.equal(manager.stateFor("1234", { socketId: "a" })?.me?.correct, true);
+    assert.equal(manager.stateFor("1234", { socketId: "b" })?.me?.correct, false);
+    assert.deepEqual(manager.stateFor("1234", "host")?.question?.reveal, {
+      type: "order",
+      items: ["one", "two", "three"],
+    });
+
+    manager.next("1234");
+    const pairs = manager.stateFor("1234", "host")?.question;
+    assert.deepEqual(pairs?.items, ["a", "b", "c"]);
+    const matches = pairs?.matches ?? [];
+    manager.answer("1234", "a", ["1", "2", "3"].map((value) => matches.indexOf(value)));
+    assert.equal(manager.stateFor("1234", { socketId: "a" })?.me?.answered, true);
+    manager.disposeAll();
   });
 });

@@ -1,9 +1,13 @@
 import type {
+  AnswerValue,
   GameBoardEntry,
   GamePhase,
+  GameQuestion,
   GameState,
+  QuestionReveal,
   QuizQuestion,
 } from "../shared/events";
+import { acceptAnswer, grade, identity, shuffled, type Shuffle } from "./grading";
 
 export type GameQuiz = {
   title: string;
@@ -35,9 +39,11 @@ type PlayerState = {
   nickname: string;
   score: number;
   streak: number;
-  choice: number | null;
+  choice: AnswerValue | null;
   answeredAt: number;
   gained: number;
+  /** Null for polls and before the round ends. */
+  correct: boolean | null;
 };
 
 type Game = {
@@ -46,6 +52,8 @@ type Game = {
   phase: GamePhase;
   index: number;
   startedAt: number;
+  /** How the current question's items are shown. Identity for question types that are not shuffled. */
+  shuffle: Shuffle;
   timer: ReturnType<typeof setTimeout> | null;
   players: Map<string, PlayerState>;
 };
@@ -55,13 +63,81 @@ const BASE_POINTS = 1000;
 const STREAK_BONUS = 100;
 const STREAK_BONUS_CAP = 5;
 
-/** Full points for an instant answer, down to half points at the buzzer, plus a streak bonus. */
-export function pointsFor(elapsedMs: number, timeSeconds: number, streak: number): number {
+/**
+ * Full points for an instant answer, down to half points at the buzzer, plus a streak bonus.
+ * `credit` (0 to 1) scales the time points for partly right answers.
+ */
+export function pointsFor(elapsedMs: number, timeSeconds: number, streak: number, credit = 1): number {
   const limit = timeSeconds * 1000;
   const ratio = Math.min(Math.max(elapsedMs / limit, 0), 1);
-  const base = Math.round(BASE_POINTS * (1 - 0.5 * ratio));
+  const base = Math.round(BASE_POINTS * (1 - 0.5 * ratio) * credit);
   const bonus = Math.min(Math.max(streak - 1, 0), STREAK_BONUS_CAP) * STREAK_BONUS;
   return base + bonus;
+}
+
+const POINTS_MULTIPLIER = { standard: 1, double: 2, none: 0 } as const;
+
+function shuffleLength(question: QuizQuestion): number {
+  if (question.type === "order") {
+    return question.items.length;
+  }
+  return question.type === "pairs" ? question.pairs.length : 0;
+}
+
+function revealFor(question: QuizQuestion): QuestionReveal {
+  switch (question.type) {
+    case "choice":
+      return { type: "choice", correct: question.correct };
+    case "multi":
+      return { type: "multi", correct: question.correct };
+    case "text":
+      return { type: "text", answers: question.answers };
+    case "slider":
+      return { type: "slider", correct: question.correct, tolerance: question.tolerance };
+    case "order":
+      return { type: "order", items: question.items };
+    case "pairs":
+      return { type: "pairs", pairs: question.pairs };
+    case "poll":
+      return { type: "poll" };
+  }
+}
+
+function viewQuestion(question: QuizQuestion, shuffle: Shuffle, over: boolean): GameQuestion {
+  const view: GameQuestion = {
+    type: question.type,
+    text: question.text,
+    time: question.time,
+    points: question.points,
+    image: question.image ?? null,
+    options: [],
+    items: [],
+    matches: [],
+    range: null,
+    reveal: over ? revealFor(question) : null,
+    explanation: over ? (question.explanation ?? null) : null,
+  };
+
+  switch (question.type) {
+    case "choice":
+    case "multi":
+    case "poll":
+      view.options = question.options;
+      break;
+    case "slider":
+      view.range = { min: question.min, max: question.max };
+      break;
+    case "order":
+      view.items = shuffle.map((authored) => question.items[authored] ?? "");
+      break;
+    case "pairs":
+      view.items = question.pairs.map((pair) => pair.left);
+      view.matches = shuffle.map((authored) => question.pairs[authored]?.right ?? "");
+      break;
+    case "text":
+      break;
+  }
+  return view;
 }
 
 export function createGameManager(options: GameManagerOptions): GameManager {
@@ -95,14 +171,27 @@ export function createGameManager(options: GameManagerOptions): GameManager {
       return;
     }
 
+    const multiplier = POINTS_MULTIPLIER[question.points];
     for (const player of game.players.values()) {
-      if (player.choice === question.correct) {
-        player.streak += 1;
-        player.gained = pointsFor(player.answeredAt - game.startedAt, question.time, player.streak);
-      } else {
-        player.streak = 0;
+      if (player.choice === null) {
+        // No answer. A skipped poll leaves the streak alone, anything else breaks it.
+        player.correct = question.type === "poll" ? null : false;
+        player.streak = question.type === "poll" ? player.streak : 0;
         player.gained = 0;
+        continue;
       }
+
+      const result = grade(question, player.choice, game.shuffle);
+      player.correct = result.correct;
+      if (result.correct === null) {
+        player.gained = 0;
+        continue;
+      }
+
+      player.streak = result.correct ? player.streak + 1 : 0;
+      const elapsed = player.answeredAt - game.startedAt;
+      const earned = pointsFor(elapsed, question.time, result.correct ? player.streak : 0, result.credit);
+      player.gained = Math.round(earned * multiplier);
       player.score += player.gained;
     }
 
@@ -119,9 +208,12 @@ export function createGameManager(options: GameManagerOptions): GameManager {
     stopTimer(game);
     game.phase = "question";
     game.startedAt = now();
+    const length = shuffleLength(question);
+    game.shuffle = length > 0 ? shuffled(length) : identity(0);
     for (const player of game.players.values()) {
       player.choice = null;
       player.gained = 0;
+      player.correct = null;
     }
 
     game.timer = setTimeout(() => {
@@ -149,6 +241,7 @@ export function createGameManager(options: GameManagerOptions): GameManager {
       phase: "question",
       index: 0,
       startedAt: 0,
+      shuffle: [],
       timer: null,
       players: new Map(
         players.map((player) => [
@@ -160,6 +253,7 @@ export function createGameManager(options: GameManagerOptions): GameManager {
             choice: null,
             answeredAt: 0,
             gained: 0,
+            correct: null,
           },
         ]),
       ),
@@ -177,13 +271,8 @@ export function createGameManager(options: GameManagerOptions): GameManager {
     }
 
     const question = game.quiz.questions[game.index];
-    if (
-      !question ||
-      typeof choice !== "number" ||
-      !Number.isInteger(choice) ||
-      choice < 0 ||
-      choice >= question.options.length
-    ) {
+    const accepted = question ? acceptAnswer(question, choice) : null;
+    if (!question || accepted === null) {
       return;
     }
 
@@ -192,7 +281,7 @@ export function createGameManager(options: GameManagerOptions): GameManager {
       return;
     }
 
-    player.choice = choice;
+    player.choice = accepted;
     player.answeredAt = at;
     if (everyoneAnswered(game)) {
       endRound(game);
@@ -258,6 +347,18 @@ export function createGameManager(options: GameManagerOptions): GameManager {
     }
   }
 
+  function countOptions(game: Game, question: QuizQuestion): number[] | null {
+    if (question.type !== "choice" && question.type !== "multi" && question.type !== "poll") {
+      return null;
+    }
+
+    return question.options.map((_, optionIndex) =>
+      [...game.players.values()].filter((player) =>
+        Array.isArray(player.choice) ? player.choice.includes(optionIndex) : player.choice === optionIndex,
+      ).length,
+    );
+  }
+
   function stateFor(pin: string, viewer: GameViewer): GameState | null {
     const game = games.get(pin);
     if (!game) {
@@ -285,7 +386,7 @@ export function createGameManager(options: GameManagerOptions): GameManager {
         rank: index + 1,
         choice: player.choice,
         answered: player.choice !== null,
-        correct: showAnswer && question ? player.choice === question.correct : null,
+        correct: showAnswer ? player.correct : null,
         gained: showAnswer ? player.gained : 0,
       };
     }
@@ -297,14 +398,7 @@ export function createGameManager(options: GameManagerOptions): GameManager {
       title: game.quiz.title,
       index: game.index,
       total: game.quiz.questions.length,
-      question: inQuestion
-        ? {
-            text: question.text,
-            options: question.options,
-            time: question.time,
-            correct: showAnswer ? question.correct : null,
-          }
-        : null,
+      question: inQuestion ? viewQuestion(question, game.shuffle, showAnswer) : null,
       leftMs:
         game.phase === "question" && question
           ? Math.max(0, game.startedAt + question.time * 1000 - now())
@@ -312,12 +406,10 @@ export function createGameManager(options: GameManagerOptions): GameManager {
       board,
       answered: [...game.players.values()].filter((player) => player.choice !== null).length,
       playerCount: game.players.size,
-      counts:
-        viewer === "host" && showAnswer && question
-          ? question.options.map(
-              (_, optionIndex) =>
-                [...game.players.values()].filter((player) => player.choice === optionIndex).length,
-            )
+      counts: viewer === "host" && showAnswer && question ? countOptions(game, question) : null,
+      correctCount:
+        viewer === "host" && showAnswer && question && question.type !== "poll"
+          ? [...game.players.values()].filter((player) => player.correct === true).length
           : null,
       me,
     };

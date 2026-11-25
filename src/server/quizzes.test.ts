@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { QuizInput } from "../shared/events";
 import { createQuizStore } from "./quizzes";
 
-const input = {
+const input: QuizInput = {
   title: "Mine",
-  questions: [{ text: "Q?", options: ["a", "b", "c", "d"], correct: 2, time: 20 }],
+  questions: [{ type: "choice", points: "standard", text: "Q?", options: ["a", "b", "c", "d"], correct: 2, time: 20 }],
 };
 
 describe("quiz store", () => {
@@ -27,5 +28,15 @@ describe("quiz store", () => {
   it("returns null for an unknown id", () => {
     const store = createQuizStore(":memory:");
     assert.equal(store.get("nope"), null);
+  });
+
+  it("reads quizzes saved before question types existed", () => {
+    const store = createQuizStore(":memory:");
+    const legacy = [{ text: "Old?", options: ["a", "b", "c", "d"], correct: 3, time: 20 }];
+    // Writes the old shape straight into the table.
+    const id = store.create({ title: "Old", questions: legacy as unknown as QuizInput["questions"] });
+    assert.deepEqual(store.get(id)?.questions, [
+      { type: "choice", points: "standard", text: "Old?", options: ["a", "b", "c", "d"], correct: 3, time: 20 },
+    ]);
   });
 });

@@ -22,8 +22,8 @@ type TestClient = Socket<ServerToClientEvents, ClientToServerEvents>;
 type GameServer = Server<ClientToServerEvents, ServerToClientEvents>;
 
 const QUESTIONS: QuizQuestion[] = [
-  { text: "One", options: ["a", "b", "c", "d"], correct: 1, time: 30 },
-  { text: "Two", options: ["a", "b", "c", "d"], correct: 2, time: 30 },
+  { type: "choice", points: "standard", text: "One", options: ["a", "b", "c", "d"], correct: 1, time: 30 },
+  { type: "choice", points: "standard", text: "Two", options: ["a", "b", "c", "d"], correct: 2, time: 30 },
 ];
 
 function waitFor<T>(socket: TestClient, event: keyof ServerToClientEvents): Promise<T> {
@@ -153,7 +153,7 @@ describe("game over sockets", () => {
       host.emit("host:start", { pin, quizId: "demo" });
       const h1 = await hostStates.until((s) => s.phase === "question");
       const a1 = await annStates.until((s) => s.phase === "question");
-      assert.equal(h1.question?.correct, null);
+      assert.equal(h1.question?.reveal, null);
       assert.equal(h1.me, null);
       assert.equal(a1.me?.nickname, "Ann");
 
@@ -161,7 +161,7 @@ describe("game over sockets", () => {
       bob.emit("player:answer", { pin, choice: 0 });
       const h2 = await hostStates.until((s) => s.phase === "results");
       const a2 = await annStates.until((s) => s.phase === "results");
-      assert.equal(h2.question?.correct, 1);
+      assert.deepEqual(h2.question?.reveal, { type: "choice", correct: 1 });
       assert.deepEqual(h2.counts, [1, 1, 0, 0]);
       assert.equal(a2.me?.correct, true);
       assert.equal(a2.me?.rank, 1);

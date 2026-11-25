@@ -251,9 +251,9 @@ body {
 .sh-logo-host {
   position: absolute;
   left: 50%;
-  top: 183px;
+  top: 250px;
   z-index: 1;
-  width: 269px;
+  width: 300px;
   transform: translateX(-50%);
 }
 
@@ -369,7 +369,7 @@ body {
 .sh-gold-start {
   position: absolute;
   right: 32px;
-  top: 183px;
+  top: 256px;
   z-index: 1;
   width: 96px;
   height: 42px;
@@ -502,60 +502,139 @@ body {
   color: var(--sh-white);
 }
 
-.sh-host-band {
+.sh-host-bar {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
   z-index: 2;
   display: flex;
-  height: 135px;
+  height: 54px;
   align-items: center;
   justify-content: center;
   background: var(--sh-navy);
 }
 
-.sh-pin-plate {
-  position: relative;
-  margin-top: 20px;
-  padding: 4px 16px 2px;
-  background: var(--sh-white);
+.sh-bar-logo {
+  width: 130px;
+  height: auto;
+}
+
+.sh-bar-tools {
+  position: absolute;
+  right: 16px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.sh-bar-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.sh-bar-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sh-bar-button:hover,
+.sh-bar-button:focus-visible {
+  background: rgb(255 255 255 / 0.15);
+}
+
+.sh-join-row {
+  position: absolute;
+  left: 50%;
+  top: 77px;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  transform: translateX(-50%);
+}
+
+/* The slanted navy line between the two white panels is the banner background showing through. */
+.sh-join-banner {
+  display: flex;
+  height: 142px;
+  border-radius: 4px;
+  background: var(--sh-navy);
   box-shadow: 0 3px 0 rgb(0 0 0 / 0.35);
+}
+
+.sh-join-text {
+  display: flex;
+  min-width: 300px;
+  align-items: center;
+  padding: 0 40px 0 26px;
+  border-radius: 4px 0 0 4px;
+  background: var(--sh-white);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%);
   color: var(--sh-ink);
-  text-align: center;
+  font-size: 20px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.sh-pin-plate {
+  display: flex;
+  min-width: 350px;
+  flex-direction: column;
+  justify-content: center;
+  margin-left: -18px;
+  padding: 0 26px 0 44px;
+  border: 0;
+  border-radius: 0 4px 4px 0;
+  background: var(--sh-white);
+  clip-path: polygon(22px 0, 100% 0, 100% 100%, 0 100%);
+  color: var(--sh-ink);
+  text-align: left;
   white-space: nowrap;
   cursor: pointer;
   font-family: inherit;
 }
 
 .sh-pin-plate:focus-visible {
-  outline: 2px solid var(--sh-white);
-  outline-offset: 4px;
+  outline: 3px solid var(--sh-gold);
+  outline-offset: -6px;
 }
 
 .sh-pin-tag {
-  position: absolute;
-  left: 50%;
-  top: -20px;
-  transform: translateX(-50%);
-  padding: 4px 12px 1px;
-  background: var(--sh-white);
-  border-radius: 5px 5px 0 0;
-  color: var(--sh-navy);
+  color: var(--sh-ink);
   font-weight: 700;
-  font-size: 13px;
-  white-space: nowrap;
+  font-size: 22px;
+  line-height: 1.1;
 }
 
 .sh-pin-value {
   font-weight: 900;
-  font-size: 56px;
-  line-height: 1.15;
-  letter-spacing: 1px;
+  font-size: 80px;
+  line-height: 1;
+  letter-spacing: 2px;
   color: var(--sh-ink);
   font-variant-numeric: tabular-nums;
+}
+
+.sh-qr {
+  width: 142px;
+  height: 142px;
+  border-radius: 4px;
+  background: var(--sh-white);
+  box-shadow: 0 3px 0 rgb(0 0 0 / 0.35);
+  image-rendering: pixelated;
 }
 
 .sh-wait-pill {
@@ -719,15 +798,38 @@ body {
     margin: 16px auto 0;
   }
 
-  .sh-host-band {
+  .sh-join-row {
     position: relative;
+    left: auto;
+    top: auto;
+    flex-direction: column;
+    align-items: center;
+    margin: 78px auto 0;
+    transform: none;
+  }
+
+  .sh-join-banner {
     height: auto;
-    min-height: 96px;
-    padding: 28px 16px 16px;
+    max-width: calc(100vw - 2rem);
+    flex-direction: column;
+    background: transparent;
+    box-shadow: none;
+    gap: 3px;
+  }
+
+  .sh-join-text,
+  .sh-pin-plate {
+    min-width: 0;
+    margin-left: 0;
+    padding: 14px 20px;
+    clip-path: none;
+    border-radius: 4px;
+    text-align: center;
+    justify-content: center;
   }
 
   .sh-pin-value {
-    font-size: clamp(2rem, 10vw, 3.5rem);
+    font-size: clamp(2.5rem, 14vw, 4.5rem);
   }
 
   .sh-wait-pill,

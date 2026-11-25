@@ -1,7 +1,9 @@
 "use client";
 
+import { Maximize, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HostGame, type ClientGame } from "@/components/game";
 import { GoldButton, Logo, Stage } from "@/components/stage";
@@ -83,6 +85,38 @@ function clearHostSession(): void {
   }
 }
 
+/** Where players join, and a QR code that opens the join page with the PIN filled in. */
+function useJoinLink(pin: string | null): { host: string; qr: string | null } {
+  const [qr, setQr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pin) {
+      return;
+    }
+
+    let current = true;
+    const url = `${window.location.origin}/?pin=${pin}`;
+    QRCode.toDataURL(url, { margin: 1, width: 280, errorCorrectionLevel: "M" }).then(
+      (dataUrl) => {
+        if (current) {
+          setQr(dataUrl);
+        }
+      },
+      () => {
+        if (current) {
+          setQr(null);
+        }
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [pin]);
+
+  // The lobby only exists after a socket event, so `window` is always there when this is used.
+  return { host: typeof window === "undefined" ? "" : window.location.host, qr: pin ? qr : null };
+}
+
 export default function HostPage() {
   const router = useRouter();
   const connection = useSocket();
@@ -99,6 +133,7 @@ export default function HostPage() {
   const [quizError, setQuizError] = useState(false);
   const [pickedQuizId, setPickedQuizId] = useState("");
   const [openingEditor, setOpeningEditor] = useState(false);
+  const joinLink = useJoinLink(lobby?.pin ?? null);
   const lobbyRef = useRef<LobbyState | null>(null);
   const hostingRef = useRef(false);
   const reclaimingRef = useRef(false);
@@ -498,21 +533,55 @@ export default function HostPage() {
     const quizId = pickedQuizId || quizzes?.[0]?.id || "";
     return (
       <Stage variant="lobby">
-        <header className="sh-host-band">
-          <button
-            type="button"
-            onClick={copyPin}
-            className="sh-pin-plate"
-            aria-label={`Game PIN ${lobby.pin}. Click to copy.`}
-          >
-            <span className="sh-pin-tag">Game PIN:</span>
-            <span className="sh-pin-value">{lobby.pin}</span>
-          </button>
-          <span role="status" className="sr-only">
-            {pinCopied ? "Copied" : ""}
-          </span>
+        <header className="sh-host-bar">
+          <Logo className="sh-bar-logo" priority />
+          <div className="sh-bar-tools">
+            <span className="sh-bar-count" aria-label={`${lobby.players.length} players joined`}>
+              <Users aria-hidden="true" size={20} />
+              {lobby.players.length}
+            </span>
+            <button
+              type="button"
+              className="sh-bar-button"
+              aria-label="Toggle full screen"
+              onClick={() => {
+                if (document.fullscreenElement) {
+                  void document.exitFullscreen();
+                } else {
+                  void document.documentElement.requestFullscreen();
+                }
+              }}
+            >
+              <Maximize aria-hidden="true" size={20} />
+            </button>
+          </div>
         </header>
-        <Logo className="sh-logo-host" priority />
+        <div className="sh-join-row">
+          <div className="sh-join-banner">
+            <p className="sh-join-text">
+              Join at <b>{joinLink.host || "this site"}</b>
+              <br />
+              and enter the PIN
+            </p>
+            <button
+              type="button"
+              onClick={copyPin}
+              className="sh-pin-plate"
+              aria-label={`Game PIN ${lobby.pin}. Click to copy.`}
+            >
+              <span className="sh-pin-tag">Game PIN:</span>
+              <span className="sh-pin-value">{lobby.pin}</span>
+            </button>
+          </div>
+          {joinLink.qr ? (
+            // eslint-disable-next-line @next/next/no-img-element -- A data URL needs no image optimization.
+            <img src={joinLink.qr} alt={`QR code to join game ${lobby.pin}`} className="sh-qr" />
+          ) : null}
+        </div>
+        <span role="status" className="sr-only">
+          {pinCopied ? "Copied" : ""}
+        </span>
+        <Logo className="sh-logo-host" />
         {notice ? (
           <p role="alert" className="sh-quiz-note sh-quiz-note-lobby">
             {notice}

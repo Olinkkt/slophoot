@@ -208,6 +208,17 @@ export default function JoinPage() {
     };
   }, [socket]);
 
+  // A QR code on the host screen opens /?pin=1234. Read it once, after hydration.
+  useEffect(() => {
+    const fromLink = normalizePin(new URLSearchParams(window.location.search).get("pin") ?? "");
+    if (fromLink) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- The URL is only readable on the client.
+      setPin(fromLink);
+      setFormStep("nickname");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   const submitPin = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedPin = normalizePin(pin);

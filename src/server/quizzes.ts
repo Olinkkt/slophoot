@@ -50,6 +50,80 @@ const DEMO_QUIZ: QuizInput = {
   ],
 };
 
+const DEMO_QUIZ_ALL_TYPES: QuizInput = {
+  title: "Demo quiz #2",
+  questions: [
+    {
+      type: "choice",
+      points: "standard",
+      text: "What is the largest ocean on Earth?",
+      options: ["Atlantic", "Indian", "Pacific", "Arctic"],
+      correct: 2,
+      time: 15,
+    },
+    {
+      type: "choice",
+      points: "standard",
+      text: "A tomato is botanically a fruit.",
+      options: ["True", "False"],
+      correct: 0,
+      time: 10,
+      explanation: "Tomatoes grow from a flower and hold seeds, which makes them fruit.",
+    },
+    {
+      type: "multi",
+      points: "standard",
+      text: "Which of these are prime numbers?",
+      options: ["2", "9", "11", "15"],
+      correct: [0, 2],
+      time: 20,
+    },
+    {
+      type: "text",
+      points: "standard",
+      text: "What is the capital of Japan?",
+      answers: ["Tokyo"],
+      time: 20,
+    },
+    {
+      type: "slider",
+      points: "double",
+      text: "In what year did humans first land on the Moon?",
+      min: 1900,
+      max: 2020,
+      correct: 1969,
+      tolerance: 5,
+      time: 25,
+      explanation: "Apollo 11 landed on July 20, 1969.",
+    },
+    {
+      type: "order",
+      points: "standard",
+      text: "Put these planets in order, starting closest to the Sun.",
+      items: ["Mercury", "Venus", "Earth", "Mars"],
+      time: 30,
+    },
+    {
+      type: "pairs",
+      points: "standard",
+      text: "Match each country with its capital.",
+      pairs: [
+        { left: "France", right: "Paris" },
+        { left: "Italy", right: "Rome" },
+        { left: "Spain", right: "Madrid" },
+      ],
+      time: 30,
+    },
+    {
+      type: "poll",
+      points: "none",
+      text: "What should we eat after the quiz?",
+      options: ["Pizza", "Tacos", "Sushi", "Burgers"],
+      time: 15,
+    },
+  ],
+};
+
 export function createQuizStore(path: string): QuizStore {
   if (path !== ":memory:") {
     mkdirSync(dirname(path), { recursive: true });
@@ -66,6 +140,7 @@ export function createQuizStore(path: string): QuizStore {
   );
   const listStatement = db.prepare("SELECT id, title, questions FROM quizzes ORDER BY created_at, rowid");
   const getStatement = db.prepare("SELECT id, title, questions FROM quizzes WHERE id = ?");
+  const titleStatement = db.prepare("SELECT 1 AS found FROM quizzes WHERE title = ? LIMIT 1");
 
   function count(): number {
     const row = countStatement.get() as { total: number } | undefined;
@@ -118,6 +193,11 @@ export function createQuizStore(path: string): QuizStore {
 
   if (count() === 0) {
     create(DEMO_QUIZ);
+  }
+
+  // Added after the first release, so existing databases get it too.
+  if (!titleStatement.get(DEMO_QUIZ_ALL_TYPES.title)) {
+    create(DEMO_QUIZ_ALL_TYPES);
   }
 
   return { list, get, create, count };

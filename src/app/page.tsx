@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
+import { PlayerGame, type ClientGame } from "@/components/game";
 import { GoldButton, Logo, Stage } from "@/components/stage";
 import { useSocket } from "@/lib/socket";
-import type { JoinErrorPayload, LobbyUpdate } from "@/shared/events";
+import type { GameState, JoinErrorPayload, LobbyUpdate } from "@/shared/events";
 import {
   JOIN_ERRORS,
   NICKNAME_MAX_LENGTH,
@@ -55,6 +56,7 @@ export default function JoinPage() {
   const [joinedName, setJoinedName] = useState("");
   const [joinedPin, setJoinedPin] = useState("");
   const [hostReconnecting, setHostReconnecting] = useState(false);
+  const [game, setGame] = useState<ClientGame | null>(null);
   const joinedPinRef = useRef<string | null>(null);
   const pinInputRef = useRef<HTMLInputElement>(null);
   const nicknameInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +93,7 @@ export default function JoinPage() {
     joinedPinRef.current = null;
     setHostReconnecting(false);
     setJoining(false);
+    setGame(null);
     setPhase("closed");
   });
 
@@ -108,6 +111,7 @@ export default function JoinPage() {
   const onDisconnect = useEffectEvent(() => {
     setJoining(false);
     setHostReconnecting(false);
+    setGame(null);
     if (phase === "waiting") {
       joinedPinRef.current = null;
       setErrors({ form: "You were disconnected. Join again." });
@@ -139,6 +143,14 @@ export default function JoinPage() {
     const handleHostReconnected = () => {
       onHostReconnected();
     };
+    const handleGameState = (state: GameState) => {
+      if (joinedPinRef.current === state.pin) {
+        setGame({ ...state, receivedAt: Date.now() });
+      }
+    };
+    const handleGameEnded = () => {
+      setGame(null);
+    };
 
     socket.on("lobby:update", handleLobbyUpdate);
     socket.on("join:error", handleJoinError);
@@ -146,6 +158,8 @@ export default function JoinPage() {
     socket.on("disconnect", handleDisconnect);
     socket.on("lobby:hostReconnecting", handleHostReconnecting);
     socket.on("lobby:hostReconnected", handleHostReconnected);
+    socket.on("game:state", handleGameState);
+    socket.on("game:ended", handleGameEnded);
 
     const onVisible = () => {
       if (document.visibilityState === "visible" && !socket.connected) {
@@ -164,6 +178,8 @@ export default function JoinPage() {
       socket.off("disconnect", handleDisconnect);
       socket.off("lobby:hostReconnecting", handleHostReconnecting);
       socket.off("lobby:hostReconnected", handleHostReconnected);
+      socket.off("game:state", handleGameState);
+      socket.off("game:ended", handleGameEnded);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [socket]);
@@ -217,8 +233,20 @@ export default function JoinPage() {
     [connected, joining, nickname, pin, socket],
   );
 
+  const answer = useCallback(
+    (choice: number) => {
+      if (!socket || !socket.connected || !joinedPinRef.current) {
+        return;
+      }
+
+      socket.emit("player:answer", { pin: joinedPinRef.current, choice });
+    },
+    [socket],
+  );
+
   const joinAnother = useCallback(() => {
     joinedPinRef.current = null;
+    setGame(null);
     setHostReconnecting(false);
     setPin("");
     setFormStep("pin");
@@ -247,6 +275,14 @@ export default function JoinPage() {
   const nicknameDescribedBy = ["nickname-count", nicknameError ? "nickname-error" : null]
     .filter((id): id is string => id !== null)
     .join(" ");
+
+  if (phase === "waiting" && game) {
+    return (
+      <Stage variant="lobby">
+        <PlayerGame game={game} onAnswer={answer} />
+      </Stage>
+    );
+  }
 
   if (phase === "waiting") {
     return (

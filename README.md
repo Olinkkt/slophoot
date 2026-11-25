@@ -1,6 +1,6 @@
 # Slophoot
 
-Self-hosted Kahoot-style quiz. The GitHub repository is [Olinkkt/vibehoot](https://github.com/Olinkkt/vibehoot); the app name is Slophoot. This milestone is the lobby: a host creates a room, players join with a PIN and nickname, and the host sees the list update live. Starting the game is not implemented yet. Room state lives in memory and is cleared when the server restarts.
+Self-hosted Kahoot-style quiz. The GitHub repository is [Olinkkt/vibehoot](https://github.com/Olinkkt/vibehoot); the app name is Slophoot. A host creates a room, players join with a PIN and nickname, the host picks a quiz and starts it, and everyone plays timed multiple-choice rounds with scoring, streaks and a final podium. Quizzes are made in the editor at `/editor` and stored in SQLite. Room and game state live in memory and are cleared when the server restarts. Players cannot join once a game has started, and a player who disconnects mid-game leaves it.
 
 ## Run in development
 
@@ -13,6 +13,7 @@ npm run dev
 
 - Host: [http://localhost:3000/host](http://localhost:3000/host)
 - Players: [http://localhost:3000](http://localhost:3000)
+- Quiz editor: [http://localhost:3000/editor](http://localhost:3000/editor)
 
 Reloading the host page asks for confirmation. If the host reloads anyway, or the connection drops, the room stays open for 12 seconds. Players see "Host is reconnecting…" until the host is back. The host page keeps a host token in `sessionStorage` and, on reconnect, reclaims the same PIN and player list, including when the previous socket is still marked connected. Players see "The room was closed" only if the host does not come back in that time.
 
@@ -34,13 +35,20 @@ For deploying with **Coolify**, see the [Coolify Deployment Guide](COOLIFY.md).
 - `src/shared/events.ts` — shared Socket.io event types
 - `src/lib/socket.ts` — typed Socket.io client hook
 - `src/app/page.tsx` — player join page
-- `src/app/host/page.tsx` — host lobby
+- `src/app/host/page.tsx` — host lobby and host game screens
+- `src/app/editor/page.tsx` — quiz editor
+- `src/app/api/quizzes/route.ts` — list and create quizzes
+- `src/server/game.ts` — game rounds, timer, and scoring
+- `src/server/quizzes.ts` — SQLite quiz store (`node:sqlite`, needs Node 22.5 or newer)
+- `src/components/game.tsx` — host and player game screens
 
 Room rules are covered by `npm test`. `npm run lint` checks the source, and `npm run typecheck` generates Next.js route types and then runs `tsc --noEmit`.
 
 ## Configuration
 
 `PORT` (default `3000`) is the HTTP port.
+
+`DB_PATH` (default `data/slophoot.db`) is the SQLite quiz database. An empty database gets a demo quiz. In Docker, mount a volume at `/app/data` to keep quizzes across deploys.
 
 `HOST` sets the bind address. Leave it unset to listen on every interface, which is what you want when players join from phones on the same network. The startup log then lists those LAN addresses next to `http://localhost:<port>`. `HOST=0.0.0.0` and `HOST=::` listen on every interface too; the log still shows `http://localhost:<port>` and the LAN addresses, not `http://0.0.0.0:<port>`. Set `HOST=127.0.0.1` to accept connections from this machine only.
 

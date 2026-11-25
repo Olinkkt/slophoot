@@ -2,9 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { HostGame, type ClientGame } from "@/components/game";
 import { GoldButton, Logo, Stage } from "@/components/stage";
 import { useSocket } from "@/lib/socket";
-import type { HostErrorPayload, HostReadyPayload, LobbyPlayer, LobbyUpdate } from "@/shared/events";
+import type {
+  GameErrorPayload,
+  GameState,
+  HostErrorPayload,
+  HostReadyPayload,
+  LobbyPlayer,
+  LobbyUpdate,
+  QuizSummary,
+} from "@/shared/events";
 import { HOST_ERRORS } from "@/shared/validation";
 
 type LobbyState = {
@@ -82,6 +91,10 @@ export default function HostPage() {
   const [lobby, setLobby] = useState<LobbyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pinCopied, setPinCopied] = useState(false);
+  const [game, setGame] = useState<ClientGame | null>(null);
+  const [quizzes, setQuizzes] = useState<QuizSummary[] | null>(null);
+  const [quizError, setQuizError] = useState(false);
+  const [pickedQuizId, setPickedQuizId] = useState("");
   const lobbyRef = useRef<LobbyState | null>(null);
   const hostingRef = useRef(false);
   const reclaimingRef = useRef(false);
@@ -98,6 +111,35 @@ export default function HostPage() {
   useEffect(() => {
     replacedRef.current = replaced;
   }, [replaced]);
+
+  const inLobby = lobby !== null;
+  useEffect(() => {
+    if (!inLobby) {
+      return;
+    }
+
+    const controller = new AbortController();
+    fetch("/api/quizzes", { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`quizzes ${response.status}`);
+        }
+        return response.json() as Promise<QuizSummary[]>;
+      })
+      .then((list) => {
+        setQuizError(false);
+        setQuizzes(list);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setQuizError(true);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [inLobby]);
 
   useEffect(() => {
     if (!lobby || replaced) {
@@ -161,6 +203,7 @@ export default function HostPage() {
       setReclaiming(false);
       hostingRef.current = false;
       setNotice(null);
+      setGame(null);
       setLobby(null);
     };
 
@@ -189,6 +232,7 @@ export default function HostPage() {
       if (lobbyRef.current) {
         setNotice("The connection dropped and the room was closed.");
       }
+      setGame(null);
       setLobby(null);
     };
 
@@ -217,6 +261,7 @@ export default function HostPage() {
       setReclaiming(false);
       replacedRef.current = false;
       setReplaced(false);
+      setGame(null);
       setLobby(null);
     };
 
@@ -256,11 +301,29 @@ export default function HostPage() {
       }
     };
 
+    const onGameState = (state: GameState) => {
+      if (!hostingRef.current) {
+        return;
+      }
+      setGame({ ...state, receivedAt: Date.now() });
+    };
+
+    const onGameEnded = () => {
+      setGame(null);
+    };
+
+    const onGameError = (error: GameErrorPayload) => {
+      setNotice(error.message);
+    };
+
     socket.on("disconnect", onDisconnect);
     socket.on("host:ready", onHostReady);
     socket.on("lobby:update", onLobbyUpdate);
     socket.on("host:error", onHostError);
     socket.on("host:replaced", onHostReplaced);
+    socket.on("game:state", onGameState);
+    socket.on("game:ended", onGameEnded);
+    socket.on("game:error", onGameError);
 
     return () => {
       clearRetryTimer();
@@ -269,6 +332,9 @@ export default function HostPage() {
       socket.off("lobby:update", onLobbyUpdate);
       socket.off("host:error", onHostError);
       socket.off("host:replaced", onHostReplaced);
+      socket.off("game:state", onGameState);
+      socket.off("game:ended", onGameEnded);
+      socket.off("game:error", onGameError);
     };
   }, [socket]);
 
@@ -364,6 +430,24 @@ export default function HostPage() {
     };
   }, []);
 
+  const startGame = useCallback(() => {
+    const quizId = pickedQuizId || quizzes?.[0]?.id;
+    if (!socket || !socket.connected || !lobby || !quizId) {
+      return;
+    }
+
+    setNotice(null);
+    socket.emit("host:start", { pin: lobby.pin, quizId });
+  }, [lobby, pickedQuizId, quizzes, socket]);
+
+  const nextStep = useCallback(() => {
+    if (!socket || !socket.connected || !lobby) {
+      return;
+    }
+
+    socket.emit("host:next", { pin: lobby.pin });
+  }, [lobby, socket]);
+
   const createRoom = useCallback(() => {
     if (!socket || !socket.connected) {
       return;
@@ -398,7 +482,21 @@ export default function HostPage() {
     );
   }
 
+  if (lobby && game && game.pin === lobby.pin) {
+    return (
+      <Stage variant="lobby">
+        <HostGame game={game} onNext={nextStep} />
+        {reclaiming ? (
+          <p role="status" className="sh-status">
+            Reconnecting…
+          </p>
+        ) : null}
+      </Stage>
+    );
+  }
+
   if (lobby) {
+    const quizId = pickedQuizId || quizzes?.[0]?.id || "";
     return (
       <Stage variant="lobby">
         <header className="sh-host-band">
@@ -416,12 +514,40 @@ export default function HostPage() {
           </span>
         </header>
         <Logo className="sh-logo-host" priority />
+        <div className="sh-quiz-pick">
+          <label htmlFor="quiz" className="sh-quiz-label">
+            Quiz
+          </label>
+          <select
+            id="quiz"
+            className="sh-quiz-select"
+            value={quizId}
+            disabled={!quizzes || quizzes.length === 0}
+            onChange={(event) => {
+              setPickedQuizId(event.target.value);
+            }}
+          >
+            {quizzes === null ? <option value="">{quizError ? "Couldn’t load quizzes" : "Loading…"}</option> : null}
+            {quizzes?.map((quiz) => (
+              <option key={quiz.id} value={quiz.id}>
+                {quiz.title} ({quiz.questionCount})
+              </option>
+            ))}
+          </select>
+          <Link href="/editor" className="sh-quiz-link">
+            Create a quiz
+          </Link>
+          {notice ? (
+            <p role="alert" className="sh-quiz-note">
+              {notice}
+            </p>
+          ) : null}
+        </div>
         <GoldButton
           type="button"
           className="sh-gold-start"
-          disabled
-          aria-label="Start game – coming soon"
-          title="Start game – coming soon"
+          disabled={!quizId || lobby.players.length === 0 || !connected || reclaiming}
+          onClick={startGame}
         >
           Start
         </GoldButton>

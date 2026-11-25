@@ -46,6 +46,10 @@ COPY --chown=nextjs:nodejs --from=builder /app/src ./src
 COPY --chown=nextjs:nodejs --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --chown=nextjs:nodejs --from=builder /app/next.config.ts ./next.config.ts
 
+# SQLite quiz database lives here. Mount a volume at /app/data to keep quizzes.
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+VOLUME ["/app/data"]
+
 USER nextjs
 
 EXPOSE 3000

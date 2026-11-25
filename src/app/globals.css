@@ -381,6 +381,54 @@ body {
   opacity: 1;
 }
 
+.sh-quiz-pick {
+  position: absolute;
+  left: 32px;
+  top: 183px;
+  z-index: 1;
+  display: flex;
+  width: 280px;
+  max-width: calc(100vw - 2rem);
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sh-quiz-label {
+  font-size: 14px;
+  letter-spacing: 0.3px;
+}
+
+.sh-quiz-select {
+  width: 100%;
+  height: 42px;
+  padding: 0 10px;
+  border: 2px solid var(--sh-input-border);
+  border-radius: 4px;
+  background: var(--sh-white);
+  color: var(--sh-ink);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sh-quiz-select:disabled {
+  opacity: 0.7;
+}
+
+.sh-quiz-link {
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sh-quiz-note {
+  padding: 8px 12px;
+  background: var(--sh-white);
+  border-radius: 6px;
+  color: var(--sh-error);
+  font-size: 14px;
+}
+
 .sh-error {
   margin-top: 10px;
   text-align: center;
@@ -630,6 +678,13 @@ body {
     width: min(220px, 58vw);
     margin: 24px auto 0;
     transform: none;
+  }
+
+  .sh-quiz-pick {
+    position: relative;
+    left: auto;
+    top: auto;
+    margin: 16px auto 0;
   }
 
   .sh-gold-start {
